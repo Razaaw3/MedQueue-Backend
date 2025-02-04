@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
@@ -8,8 +8,8 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'registeredUser'],
-      default: 'registeredUser',
+      enum: ["admin", "registeredUser", "doctor"],
+      default: "registeredUser",
       required: true,
     },
     phoneNumber: {
@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema(
     profile: {
       type: String, // cloudinary url
       default:
-        'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png',
+        "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png",
     },
     dob: {
       type: String,
@@ -39,6 +39,6 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-const User = mongoose.model('User', userSchema);
+const User = mongoose.model("User", userSchema);
 
 export default User;
