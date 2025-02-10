@@ -20,11 +20,11 @@ export const getUserProfile = asyncHandler(async (req, res) => {
 });
 
 export const updateUserProfile = asyncHandler(async (req, res) => {
-  const { name, dob, address, phoneNumber } = req.body;
+  const { name, dob, address, email } = req.body;
 
   const user = await User.findByIdAndUpdate(
     req.user._id,
-    { name, dob, address, phoneNumber },
+    { name, dob, address, email },
     { new: true }
   ).select("-password");
 
@@ -112,49 +112,6 @@ export const upgradeToRegisteredUser = asyncHandler(async (req, res) => {
     );
 });
 
-// export const getUserAppointmentsByStatus = asyncHandler(async (req, res) => {
-//   const {status} = req.query;
-
-//   if (!status || !['completed', 'pending'].includes(status)) {
-//     throw new ApiError(
-//       400,
-//       "status query parameter must be either 'completed' or 'pending'"
-//     );
-//   }
-
-//   const query = {
-//     userId: req.user._id,
-//     ...(status === 'pending'
-//       ? {
-//           checkInOutStatus: 'pending',
-//         }
-//       : {
-//           checkInOutStatus: 'completed',
-//         }),
-//   };
-
-//   const appointments = await UserToken.find(query)
-//     .populate('timeSlotId', 'date')
-//     .sort({date: -1})
-//     .select(
-//       'slotNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime'
-//     );
-
-//   res.status(200).json(
-//     new ApiResponse(
-//       200,
-//       {
-//         total: appointments.length,
-//         appointments,
-//       },
-//       `User ${status} appointments retrieved successfully`
-//     )
-//   );
-// });
-
-// userToken.model.js remains the same as previous artifact
-
-// Modified getUserAppointmentsByStatus function in user.controller.js
 export const getUserAppointmentsByStatus = asyncHandler(async (req, res) => {
   const { status } = req.query;
 

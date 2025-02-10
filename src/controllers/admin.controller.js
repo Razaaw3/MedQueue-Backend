@@ -16,7 +16,7 @@ export const getAllUsers = asyncHandler(async (req, res) => {
 
 export const getUserTokens = asyncHandler(async (req, res) => {
   const tokens = await UserToken.find()
-    .populate("userId", "name phoneNumber") // populate userId with name and phoneNumber fields
+    .populate("userId", "name email") // populate userId with name and email fields
     .sort({ tokenGenerationTime: -1 });
 
   if (!tokens || tokens.length === 0) {

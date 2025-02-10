@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema(
       default: "registeredUser",
       required: true,
     },
-    phoneNumber: {
+    email: {
       type: String,
       unique: true,
       required: true,
@@ -31,6 +31,16 @@ const userSchema = new mongoose.Schema(
     },
     address: {
       type: String,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    otp: {
+      type: String,
+    },
+    otpExpiry: {
+      type: Date,
     },
   },
 

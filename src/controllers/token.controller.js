@@ -38,14 +38,13 @@ export const generateToken = asyncHandler(async (req, res) => {
   //   throw new ApiError(400, "Cannot generate tokens for future dates");
   // }
 
-  // if (dayOfWeek === 0 || dayOfWeek === 6) {
-  //   throw new ApiError(
-  //     400,
-  //     "Clinic is closed on weekends. No tokens available."
-  //   );
-  // }
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    throw new ApiError(
+      400,
+      "Clinic is closed on weekends. No tokens available."
+    );
+  }
 
-  // Use the requestedDate (from the request body) to find the time slot document
   const timeSlotDoc = await TimeSlots.findOne({
     _id: timeSlotId,
     date: date,
@@ -106,12 +105,12 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   const tokenNumber = lastTokenOfDay ? lastTokenOfDay.tokenNumber + 1 : 1;
 
-  await req.user.populate("name phoneNumber");
+  await req.user.populate("name email");
 
   const userToken = new UserToken({
     userId: req.user._id,
     userName: req.user.name,
-    userPhoneNumber: req.user.phoneNumber,
+    userEmail: req.user.email,
     timeSlotId: timeSlotDoc._id,
     slotNumber: timeSlot.slotNumber,
     estimatedTurnTime,
@@ -149,7 +148,6 @@ export const generateToken = asyncHandler(async (req, res) => {
   );
 });
 
-// Cancel a token
 export const cancelToken = asyncHandler(async (req, res) => {
   const { tokenId } = req.params;
   const { role, _id: userId } = req.user;
@@ -219,12 +217,12 @@ export const getQueueStatus = asyncHandler(async (req, res) => {
     .populate({
       path: "activeTokenId",
       select: "userId estimatedTurnTime checkInOutStatus",
-      populate: { path: "userId", select: "name phoneNumber" },
+      populate: { path: "userId", select: "name email" },
     })
     .populate({
       path: "upcomingTokenIds",
       select: "userId estimatedTurnTime checkInOutStatus",
-      populate: { path: "userId", select: "name phoneNumber" },
+      populate: { path: "userId", select: "name email" },
     });
 
   if (!queue) {
@@ -312,7 +310,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
   await token.save();
   await allTokensInQueue.save();
 
-  await token.populate("userId", "name phoneNumber");
+  await token.populate("userId", "name email");
   res.json(new ApiResponse(200, token, "Token status updated successfully"));
 });
 
@@ -339,7 +337,7 @@ export const getTokensByDate = asyncHandler(async (req, res) => {
   const tokens = await UserToken.find({
     date: { $gte: startDate, $lte: endDate },
   })
-    .populate("userId", "name phoneNumber")
+    .populate("userId", "name email")
     .populate("timeSlotId", "date clinicOpeningTime clinicClosingTime")
     .sort({ tokenGenerationTime: 1 });
 

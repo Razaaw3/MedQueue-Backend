@@ -30,18 +30,18 @@ export const viewCurrentQueue = asyncHandler(async (req, res) => {
 });
 
 export const registerAsGuest = asyncHandler(async (req, res) => {
-  const { phoneNumber } = req.body;
+  const { email } = req.body;
 
-  if (!phoneNumber) {
-    throw new ApiError(400, "Phone Number is required");
+  if (!email) {
+    throw new ApiError(400, "Email is required");
   }
 
-  if (phoneNumber.length < 2 || phoneNumber.length > 20) {
-    throw new ApiError(400, "Phone Number must be between 2 and 20 characters");
+  if (email.length < 2 || email.length > 40) {
+    throw new ApiError(400, "Email must be between 2 and 40 characters");
   }
 
   const user = new User({
-    phoneNumber,
+    email,
     role: "guest",
   });
 
