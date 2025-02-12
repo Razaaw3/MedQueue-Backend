@@ -4,6 +4,9 @@ import {
   login,
   verifyOTP,
   resendOTP,
+  forgotPassword,
+  resetPassword,
+  verifyPasswordOTP,
 } from "../controllers/auth.controller.js";
 import { upload } from "../middleware/multer.middleware.js";
 
@@ -22,5 +25,8 @@ router.post(
 router.post("/verify-email", verifyOTP);
 router.post("/resend-verification-email", resendOTP);
 router.post("/login", login);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
+router.post("/verify-password-otp", verifyPasswordOTP);
 
 export default router;
