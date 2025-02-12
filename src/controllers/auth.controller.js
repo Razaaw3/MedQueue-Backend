@@ -19,7 +19,7 @@ const generateToken = (user) => {
   const accessToken = jwt.sign(
     { _id: user._id, role: user.role },
     process.env.JWT_SECRET,
-    { expiresIn: "15m" }
+    { expiresIn: "365d" }
   );
 
   const refreshToken = jwt.sign(
@@ -236,4 +236,115 @@ const login = asyncHandler(async (req, res) => {
     );
 });
 
-export { register, verifyOTP, resendOTP, login };
+// Forgot Password
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    throw new ApiError(400, "Email is required");
+  }
+
+  if (!validateEmail(email)) {
+    throw new ApiError(400, "Invalid email format");
+  }
+
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const otp = generateOTP();
+  user.otp = hashOTP(otp);
+  user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
+  await user.save();
+
+  await sendEmail(
+    email,
+    "Password Reset OTP - MedQueue",
+    "passwordReset.html",
+    { otp }
+  );
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { email }, "Password reset OTP sent to email."));
+});
+
+// Reset Password
+const resetPassword = asyncHandler(async (req, res) => {
+  const { email, newPassword, confirmPassword } = req.body;
+
+  if (newPassword !== confirmPassword) {
+    throw new ApiError(400, "Passwords do not match");
+  }
+
+  if (!email || !newPassword) {
+    throw new ApiError(400, "Email and new password are required");
+  }
+
+  if (newPassword.length < 6) {
+    throw new ApiError(400, "Password must be at least 6 characters long");
+  }
+
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  user.password = await bcrypt.hash(newPassword, 12);
+  await user.save();
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password reset successfully"));
+});
+
+const verifyPasswordOTP = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body;
+
+  if (!email || !otp) {
+    throw new ApiError(400, "Email and OTP are required.");
+  }
+
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    throw new ApiError(404, "User not found.");
+  }
+
+  if (!user.otp || user.otpExpiry < Date.now()) {
+    throw new ApiError(400, "OTP expired. Please request a new OTP.");
+  }
+
+  const isOTPValid = bcrypt.compareSync(otp, user.otp);
+  if (!isOTPValid) {
+    throw new ApiError(400, "Invalid OTP.");
+  }
+
+  // Clear OTP fields after successful verification
+  user.otp = undefined;
+  user.otpExpiry = undefined;
+  await user.save();
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        { email },
+        "OTP verified successfully. You can now reset your password."
+      )
+    );
+});
+
+export {
+  register,
+  verifyOTP,
+  resendOTP,
+  login,
+  forgotPassword,
+  resetPassword,
+  verifyPasswordOTP,
+};
