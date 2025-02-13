@@ -86,6 +86,11 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   await req.user.populate("name email");
 
+  const tokenGenerationTime = new Date();
+  tokenGenerationTime.setMinutes(
+    tokenGenerationTime.getMinutes() - tokenGenerationTime.getTimezoneOffset()
+  );
+
   const userToken = new UserToken({
     userId: req.user._id,
     userName: req.user.name,
@@ -97,6 +102,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     checkInOutStatus: "pending",
     isActive: isActive,
     tokenNumber: tokenNumber,
+    tokenGenerationTime, // ✅ Now storing the correct generation time in MongoDB
   });
 
   await userToken.save();
@@ -118,7 +124,7 @@ export const generateToken = asyncHandler(async (req, res) => {
         userName: req.user.name,
         slotNumber: userToken.slotNumber,
         date: userToken.date.toISOString(),
-        tokenGenerationTime: new Date().toISOString(),
+        tokenGenerationTime: tokenGenerationTime.toISOString(), // ✅ Now accurate
         estimatedTurnTime: estimatedTurnTime.toISOString(),
         status: userToken.checkInOutStatus,
       },
