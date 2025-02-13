@@ -4,13 +4,12 @@ import UserToken from "../models/userToken.model.js";
 import ApiError from "../utils/errors/ApiError.js";
 import { ApiResponse } from "../utils/errors/ApiResponse.js";
 import { asyncHandler } from "../utils/errors/asyncHandler.js";
-import {
-  formatEstimatedTurnTime,
-  formatTokenGenerationTime,
-} from "../utils/dateTimeFormatting.js";
+// import {
+//   formatEstimatedTurnTime,
+//   formatTokenGenerationTime,
+// } from "../utils/dateTimeFormatting.js";
 import { io } from "../index.js";
 
-// Generate a token
 export const generateToken = asyncHandler(async (req, res) => {
   const { timeSlotId, slotNumber, date } = req.body;
 
@@ -21,33 +20,20 @@ export const generateToken = asyncHandler(async (req, res) => {
     );
   }
 
-  const requestedDate = new Date(date);
-  requestedDate.setHours(0, 0, 0, 0);
-
+  const requestedDate = new Date(`${date}T00:00:00.000Z`); // ✅ Force UTC
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const dayOfWeek = today.getDay();
+  today.setUTCHours(0, 0, 0, 0);
 
   if (requestedDate < today) {
     throw new ApiError(400, "Cannot generate tokens for past dates");
   }
 
-  // testing k lie comment krdo on sat and sun
-  // if (requestedDate > today) {
-  //   throw new ApiError(400, "Cannot generate tokens for future dates");
-  // }
-
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
-    throw new ApiError(
-      400,
-      "Clinic is closed on weekends. No tokens available."
-    );
-  }
-
   const timeSlotDoc = await TimeSlots.findOne({
     _id: timeSlotId,
-    date: date,
+    date: {
+      $gte: requestedDate,
+      $lt: new Date(requestedDate.getTime() + 86400000),
+    },
   });
 
   if (!timeSlotDoc) throw new ApiError(400, "Invalid time slot document");
@@ -60,45 +46,38 @@ export const generateToken = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Time slot not available");
   }
 
-  let queue = await Queue.findOne({ date: today });
+  let queue = await Queue.findOne({ date: requestedDate });
   let isActive = false;
 
   if (!queue) {
     isActive = true;
     queue = new Queue({
-      date: today,
+      date: requestedDate,
       activeTokenId: null,
       upcomingTokenIds: [],
     });
   }
 
-  const averageWaitTime = 10;
   let estimatedTurnTime;
-
   if (queue.upcomingTokenIds.length > 0) {
     const lastTokenId =
       queue.upcomingTokenIds[queue.upcomingTokenIds.length - 1];
     const lastToken = await UserToken.findById(lastTokenId);
-
-    if (!lastToken) {
-      throw new ApiError(500, "Error retrieving the last token in the queue");
-    }
-
     estimatedTurnTime = new Date(lastToken.estimatedTurnTime);
-    estimatedTurnTime.setMinutes(
-      estimatedTurnTime.getMinutes() + averageWaitTime
-    );
   } else {
-    estimatedTurnTime = new Date();
+    estimatedTurnTime = new Date(requestedDate);
   }
 
-  const startOfDay = new Date(today);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(today);
-  endOfDay.setHours(23, 59, 59, 999);
+  estimatedTurnTime.setUTCHours(parseInt(timeSlot.startingTime.split(":")[0]));
+  estimatedTurnTime.setUTCMinutes(
+    parseInt(timeSlot.startingTime.split(":")[1])
+  );
 
   const lastTokenOfDay = await UserToken.findOne({
-    date: { $gte: startOfDay, $lte: endOfDay },
+    date: {
+      $gte: requestedDate,
+      $lt: new Date(requestedDate.getTime() + 86400000),
+    },
   })
     .sort({ tokenNumber: -1 })
     .select("tokenNumber");
@@ -114,7 +93,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     timeSlotId: timeSlotDoc._id,
     slotNumber: timeSlot.slotNumber,
     estimatedTurnTime,
-    date: today,
+    date: requestedDate,
     checkInOutStatus: "pending",
     isActive: isActive,
     tokenNumber: tokenNumber,
@@ -138,9 +117,9 @@ export const generateToken = asyncHandler(async (req, res) => {
         tokenNumber: userToken.tokenNumber,
         userName: req.user.name,
         slotNumber: userToken.slotNumber,
-        date: userToken.date,
-        tokenGenerationTime: formatTokenGenerationTime(new Date()),
-        estimatedTurnTime: formatEstimatedTurnTime(userToken.estimatedTurnTime),
+        date: userToken.date.toISOString(),
+        tokenGenerationTime: new Date().toISOString(),
+        estimatedTurnTime: estimatedTurnTime.toISOString(),
         status: userToken.checkInOutStatus,
       },
       "Token generated successfully"
