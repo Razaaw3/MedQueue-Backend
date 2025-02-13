@@ -1,51 +1,51 @@
-import User from "../models/user.model.js";
-import UserToken from "../models/userToken.model.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import ApiError from "../utils/errors/ApiError.js";
-import { ApiResponse } from "../utils/errors/ApiResponse.js";
-import { asyncHandler } from "../utils/errors/asyncHandler.js";
+import User from '../models/user.model.js';
+import UserToken from '../models/userToken.model.js';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import ApiError from '../utils/errors/ApiError.js';
+import {ApiResponse} from '../utils/errors/ApiResponse.js';
+import {asyncHandler} from '../utils/errors/asyncHandler.js';
 // import moment from "moment";
 
 export const getUserProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select("-password");
+  const user = await User.findById(req.user._id).select('-password');
 
   if (!user) {
-    throw new ApiError(404, "User not found");
+    throw new ApiError(404, 'User not found');
   }
 
   res
     .status(200)
-    .json(new ApiResponse(200, user, "User profile retrieved successfully"));
+    .json(new ApiResponse(200, user, 'User profile retrieved successfully'));
 });
 
 export const updateUserProfile = asyncHandler(async (req, res) => {
-  const { name, dob, address, email } = req.body;
+  const {name, dob, address, email} = req.body;
 
   const user = await User.findByIdAndUpdate(
     req.user._id,
-    { name, dob, address, email },
-    { new: true }
-  ).select("-password");
+    {name, dob, address, email},
+    {new: true}
+  ).select('-password');
 
   if (!user) {
-    throw new ApiError(404, "User not found");
+    throw new ApiError(404, 'User not found');
   }
 
   res
     .status(200)
-    .json(new ApiResponse(200, user, "User profile updated successfully"));
+    .json(new ApiResponse(200, user, 'User profile updated successfully'));
 });
 
 export const getUserTokenHistory = asyncHandler(async (req, res) => {
-  const tokens = await UserToken.find({ userId: req.user._id }).sort({
+  const tokens = await UserToken.find({userId: req.user._id}).sort({
     tokenGenerationTime: -1,
   });
 
   res
     .status(200)
     .json(
-      new ApiResponse(200, tokens, "User token history retrieved successfully")
+      new ApiResponse(200, tokens, 'User token history retrieved successfully')
     );
 });
 
@@ -56,27 +56,27 @@ export const getUserToken = asyncHandler(async (req, res) => {
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 999); // Set time to 23:59:59
 
-  const tokens = await UserToken.find({
+  const tokens = await UserToken.findOne({
     userId: req.user._id,
-    date: { $gte: startOfDay, $lt: endOfDay },
+    date: {$gte: startOfDay, $lt: endOfDay},
   }).select(
-    "slotNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime tokenNumber checkedOutTime"
+    'slotNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime tokenNumber checkedOutTime'
   );
 
   res
     .status(200)
-    .json(new ApiResponse(200, tokens, "User tokens retrieved successfully"));
+    .json(new ApiResponse(200, tokens, 'User tokens retrieved successfully'));
 });
 
 export const upgradeToRegisteredUser = asyncHandler(async (req, res) => {
-  if (req.user.role !== "guest") {
-    throw new ApiError(400, "Only guests can upgrade to registered users");
+  if (req.user.role !== 'guest') {
+    throw new ApiError(400, 'Only guests can upgrade to registered users');
   }
 
-  const { password } = req.body;
+  const {password} = req.body;
 
   if (!password) {
-    throw new ApiError(400, "Password is required");
+    throw new ApiError(400, 'Password is required');
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -84,20 +84,20 @@ export const upgradeToRegisteredUser = asyncHandler(async (req, res) => {
   const updatedUser = await User.findByIdAndUpdate(
     req.user._id,
     {
-      role: "registeredUser",
+      role: 'registeredUser',
       password: hashedPassword,
     },
-    { new: true }
-  ).select("-password");
+    {new: true}
+  ).select('-password');
 
   if (!updatedUser) {
-    throw new ApiError(404, "User not found");
+    throw new ApiError(404, 'User not found');
   }
 
   const token = jwt.sign(
-    { _id: updatedUser._id, role: "registeredUser" },
+    {_id: updatedUser._id, role: 'registeredUser'},
     process.env.JWT_SECRET,
-    { expiresIn: "7d" }
+    {expiresIn: '7d'}
   );
 
   const response = {
@@ -108,14 +108,14 @@ export const upgradeToRegisteredUser = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(
-      new ApiResponse(200, response, "User upgraded to registered successfully")
+      new ApiResponse(200, response, 'User upgraded to registered successfully')
     );
 });
 
 export const getUserAppointmentsByStatus = asyncHandler(async (req, res) => {
-  const { status } = req.query;
+  const {status} = req.query;
 
-  if (!status || !["completed", "pending"].includes(status)) {
+  if (!status || !['completed', 'pending'].includes(status)) {
     throw new ApiError(
       400,
       "status query parameter must be either 'completed' or 'pending'"
@@ -129,16 +129,16 @@ export const getUserAppointmentsByStatus = asyncHandler(async (req, res) => {
 
   const appointments = await UserToken.find(query)
     .populate({
-      path: "timeSlotId",
-      select: "date timeSlots",
+      path: 'timeSlotId',
+      select: 'date timeSlots',
       populate: {
-        path: "timeSlots",
-        match: { slotNumber: { $exists: true } },
+        path: 'timeSlots',
+        match: {slotNumber: {$exists: true}},
       },
     })
-    .sort({ date: -1 })
+    .sort({date: -1})
     .select(
-      "slotNumber tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime checkedOutTime"
+      'slotNumber tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime checkedOutTime'
     );
 
   const transformedAppointments = appointments.map((apt) => {
