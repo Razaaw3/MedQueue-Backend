@@ -25,11 +25,16 @@ export const io = new Server(server, {
   },
 });
 
-connectDB();
+connectDB(io);
 
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors());
+
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
