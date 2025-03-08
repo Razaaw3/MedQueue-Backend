@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import ApiError from '../utils/errors/ApiError.js';
 import {ApiResponse} from '../utils/errors/ApiResponse.js';
 import {asyncHandler} from '../utils/errors/asyncHandler.js';
+import {uploadOnCloudinary} from '../utils/cloudinaryImageHandling.js';
 // import moment from "moment";
 
 export const getUserProfile = asyncHandler(async (req, res) => {
@@ -35,6 +36,41 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(new ApiResponse(200, user, 'User profile updated successfully'));
+});
+
+export const updateProfileImage = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(400, 'No image uploaded');
+  }
+
+  console.log('Uploaded file:', req.file);
+
+  // Upload to Cloudinary
+  const profileResponse = await uploadOnCloudinary(req.file.path);
+
+  if (!profileResponse) {
+    throw new ApiError(500, 'Failed to upload image to Cloudinary');
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    {profile: profileResponse.url}, // Save Cloudinary URL
+    {new: true}
+  ).select('-password');
+
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        {imageUrl: profileResponse.url},
+        'User profile updated successfully'
+      )
+    );
 });
 
 export const getUserTokenHistory = asyncHandler(async (req, res) => {
@@ -114,7 +150,6 @@ export const upgradeToRegisteredUser = asyncHandler(async (req, res) => {
 
 export const getUserAppointmentsByStatus = asyncHandler(async (req, res) => {
   const {status} = req.query;
-
   if (!status || !['completed', 'pending'].includes(status)) {
     throw new ApiError(
       400,
@@ -140,6 +175,8 @@ export const getUserAppointmentsByStatus = asyncHandler(async (req, res) => {
     .select(
       'slotNumber tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime checkedOutTime'
     );
+
+  console.log(appointments);
 
   const transformedAppointments = appointments.map((apt) => {
     const timeSlot = apt.timeSlotId.timeSlots.find(

@@ -61,9 +61,11 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   let estimatedTurnTime;
   if (queue.upcomingTokenIds.length > 0) {
-    const lastTokenId =
-      queue.upcomingTokenIds[queue.upcomingTokenIds.length - 1];
+    const requiredIndex = queue.upcomingTokenIds.length - 1;
+    const lastTokenId = queue.upcomingTokenIds[requiredIndex];
+
     const lastToken = await UserToken.findById(lastTokenId);
+
     estimatedTurnTime = new Date(lastToken.estimatedTurnTime);
   } else {
     estimatedTurnTime = new Date(requestedDate);
@@ -201,49 +203,21 @@ export const cancelToken = asyncHandler(async (req, res) => {
   res.json(new ApiResponse(200, {token}, message));
 });
 
-// Get queue status
+// Get today's Token
 export const getQueueStatus = asyncHandler(async (req, res) => {
-  const queue = await Queue.findOne({})
-    .populate({
-      path: 'activeTokenId',
-      select: 'userId estimatedTurnTime checkInOutStatus',
-      populate: {path: 'userId', select: 'name email'},
-    })
-    .populate({
-      path: 'upcomingTokenIds',
-      select: 'userId estimatedTurnTime checkInOutStatus',
-      populate: {path: 'userId', select: 'name email'},
-    });
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
 
-  if (!queue) {
-    return res.json(
-      new ApiResponse(
-        200,
-        {
-          activeToken: null,
-          upcomingTokens: [],
-          queueLength: 0,
-          estimatedWaitTime: 0,
-          tokenGenerationActive: false,
-        },
-        'Queue is empty'
-      )
-    );
-  }
-
-  const userTokens = queue.upcomingTokenIds.filter(
-    (token) => token.userId._id.toString() === req.user._id.toString()
-  );
-
-  const queueInfo = {
-    activeToken: queue.activeTokenId,
-    userTokens,
-    totalTokens: queue.upcomingTokenIds.length,
-    // tokenGenerationActive: true,
-  };
+  const allTokens = await Queue.findOne({date})
+    .populate('upcomingTokenIds')
+    .lean();
 
   res.json(
-    new ApiResponse(200, queueInfo, 'Queue status fetched successfully')
+    new ApiResponse(
+      200,
+      allTokens?.upcomingTokenIds,
+      'Tokens retrieved successfully'
+    )
   );
 });
 
@@ -297,8 +271,8 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
       throw new ApiError(400, 'Invalid status');
   }
 
-  await token.save();
-  await allTokensInQueue.save();
+  // await token.save();
+  // await allTokensInQueue.save();
 
   await token.populate('userId', 'name email');
   res.json(new ApiResponse(200, token, 'Token status updated successfully'));
@@ -346,8 +320,6 @@ export const getActiveToken = asyncHandler(async (req, res) => {
   const {date} = req.body;
 
   if (!date) throw new ApiError(400, 'Date query parameter is required');
-
-  console.log('Date is : ', date);
 
   const tokens = await UserToken.findOne({
     date: date,

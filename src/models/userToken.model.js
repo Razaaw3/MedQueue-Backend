@@ -1,4 +1,5 @@
-import mongoose from "mongoose";
+import moment from 'moment-timezone';
+import mongoose from 'mongoose';
 
 const userTokenSchema = new mongoose.Schema(
   {
@@ -8,7 +9,7 @@ const userTokenSchema = new mongoose.Schema(
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: 'User',
       required: true,
     },
     tokenGenerationTime: {
@@ -18,7 +19,7 @@ const userTokenSchema = new mongoose.Schema(
     },
     timeSlotId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "TimeSlots",
+      ref: 'TimeSlots',
       required: true,
     },
     slotNumber: {
@@ -27,8 +28,8 @@ const userTokenSchema = new mongoose.Schema(
     },
     checkInOutStatus: {
       type: String,
-      enum: ["pending", "onsite", "completed", "cancelled"],
-      default: "pending",
+      enum: ['pending', 'onsite', 'completed', 'cancelled'],
+      default: 'pending',
     },
     estimatedTurnTime: {
       type: Date,
@@ -44,11 +45,30 @@ const userTokenSchema = new mongoose.Schema(
     checkedOutTime: {
       type: Date,
     },
+    isExpired: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-const UserToken = mongoose.model("UserToken", userTokenSchema);
+// userTokenSchema.pre('find', function () {
+//   const currentTime = new Date();
+//   currentTime.setMinutes(
+//     currentTime.getMinutes() - currentTime.getTimezoneOffset()
+//   );
+//   this.updateMany(
+//     {
+//       estimatedTurnTime: {$lt: currentTime},
+//       checkInOutStatus: 'pending',
+//       isExpired: false,
+//     },
+//     {$set: {isExpired: true}}
+//   );
+// });
+
+const UserToken = mongoose.model('UserToken', userTokenSchema);
 export default UserToken;

@@ -1,5 +1,5 @@
-import moment from "moment";
-import TimeSlots from "../models/timeSlots.model.js";
+import moment from 'moment';
+import TimeSlots from '../models/timeSlots.model.js';
 
 export const createMonthlyTimeSlots = async (
   month,
@@ -10,22 +10,26 @@ export const createMonthlyTimeSlots = async (
   const firstDayOfMonth = moment()
     .year(year)
     .month(month - 1)
-    .startOf("month");
+    .startOf('month');
   const lastDayOfMonth = moment()
     .year(year)
     .month(month - 1)
-    .endOf("month");
+    .endOf('month');
 
   const workingDays = [];
 
   for (
     let date = moment(firstDayOfMonth);
     date.isSameOrBefore(lastDayOfMonth);
-    date.add(1, "days")
+    date.add(1, 'days')
   ) {
-    if (date.isoWeekday() >= 1 && date.isoWeekday() <= 5) {
-      workingDays.push(date.format("YYYY-MM-DD"));
-    }
+    // // For monday - friday
+    // if (date.isoWeekday() >= 1 && date.isoWeekday() <= 5) {
+    //   workingDays.push(date.format("YYYY-MM-DD"));
+    // }
+
+    // for all days
+    workingDays.push(date.format('YYYY-MM-DD'));
   }
 
   const timeSlots = [];
@@ -39,17 +43,17 @@ export const createMonthlyTimeSlots = async (
     if (!existingSlots) {
       const slots = [];
       let currentMoment = moment(day)
-        .hour(openingTime.split(":")[0])
-        .minute(openingTime.split(":")[1]);
+        .hour(openingTime.split(':')[0])
+        .minute(openingTime.split(':')[1]);
       const closingMoment = moment(day)
-        .hour(closingTime.split(":")[0])
-        .minute(closingTime.split(":")[1]);
+        .hour(closingTime.split(':')[0])
+        .minute(closingTime.split(':')[1]);
       let slotNumber = 1;
 
       while (currentMoment.isBefore(closingMoment)) {
-        const startTime = currentMoment.format("HH:mm");
-        const endMoment = moment(currentMoment).add(10, "minutes");
-        const endTime = endMoment.format("HH:mm");
+        const startTime = currentMoment.format('HH:mm');
+        const endMoment = moment(currentMoment).add(10, 'minutes');
+        const endTime = endMoment.format('HH:mm');
 
         slots.push({
           startingTime: startTime,

@@ -185,6 +185,7 @@ const resendOTP = asyncHandler(async (req, res) => {
 // Login
 const login = asyncHandler(async (req, res) => {
   const {email, password} = req.body;
+  console.log('first');
 
   if (!email || !password) {
     throw new ApiError(400, 'Email and password are required');
