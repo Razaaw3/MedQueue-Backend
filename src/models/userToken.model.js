@@ -14,16 +14,6 @@ const userTokenSchema = new mongoose.Schema(
     },
     tokenGenerationTime: {
       type: Date,
-      default: Date.now,
-      required: true,
-    },
-    timeSlotId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'TimeSlots',
-      required: true,
-    },
-    slotNumber: {
-      type: Number,
       required: true,
     },
     checkInOutStatus: {
@@ -43,7 +33,7 @@ const userTokenSchema = new mongoose.Schema(
       default: true,
     },
     checkedOutTime: {
-      type: Date,
+      type: String,
     },
     isExpired: {
       type: Boolean,

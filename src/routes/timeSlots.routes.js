@@ -1,8 +1,8 @@
-import express from "express";
-import { getAvailableTimeSlots } from "../controllers/timeSlots.controller.js";
+// import express from "express";
+// import { getAvailableTimeSlots } from "../controllers/timeSlots.controller.js";
 
-const router = express.Router();
+// const router = express.Router();
 
-router.get("/available-slots", getAvailableTimeSlots);
+// router.get("/available-slots", getAvailableTimeSlots);
 
-export default router;
+// export default router;
