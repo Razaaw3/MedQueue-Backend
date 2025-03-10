@@ -4,7 +4,7 @@ import UserToken from '../models/userToken.model.js';
 import ApiError from '../utils/errors/ApiError.js';
 import {ApiResponse} from '../utils/errors/ApiResponse.js';
 import {asyncHandler} from '../utils/errors/asyncHandler.js';
-import {io} from '../index.js';
+import {io} from '../../index.js';
 import Clinic from '../models/clinic.model.js';
 import moment from 'moment';
 import {tz, TZDate} from '@date-fns/tz';

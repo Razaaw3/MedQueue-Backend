@@ -1,12 +1,12 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
-import connectDB from './config/db.config.js';
-import authRoutes from './routes/auth.routes.js';
-import adminRoutes from './routes/admin.routes.js';
-import userRoutes from './routes/user.routes.js';
-import tokenRoutes from './routes/tokens.routes.js';
-import clinicRoutes from './routes/clinic.routes.js';
+import connectDB from './src/config/db.config.js';
+import authRoutes from './src/routes/auth.routes.js';
+import adminRoutes from './src/routes/admin.routes.js';
+import userRoutes from './src/routes/user.routes.js';
+import tokenRoutes from './src/routes/tokens.routes.js';
+import clinicRoutes from './src/routes/clinic.routes.js';
 // import timeSlotRoutes from './routes/timeSlots.routes.js';
 import cron from 'node-cron';
 import {Server} from 'socket.io';
@@ -80,3 +80,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+export default app;
