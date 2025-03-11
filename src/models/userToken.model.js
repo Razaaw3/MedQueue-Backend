@@ -24,6 +24,9 @@ const userTokenSchema = new mongoose.Schema(
     estimatedTurnTime: {
       type: Date,
     },
+    tokenActivationTime: {
+      type: Date,
+    },
     date: {
       type: Date,
       required: true,

@@ -21,6 +21,7 @@ import {
   set,
   formatISO,
   addHours,
+  differenceInMinutes,
 } from 'date-fns';
 
 export const generateToken = asyncHandler(async (req, res) => {
@@ -229,10 +230,14 @@ export const cancelToken = asyncHandler(async (req, res) => {
 
 // Get today's Token
 export const getQueueStatus = asyncHandler(async (req, res) => {
-  const date = new Date();
-  date.setUTCHours(0, 0, 0, 0);
+  const targetDate = new Date();
 
-  const allTokens = await Queue.findOne({date})
+  const startOfDay = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
+  const endOfDay = addHours(new Date(targetDate.setHours(23, 59, 59, 999)), 5);
+
+  const allTokens = await Queue.findOne({
+    date: {$gte: startOfDay, $lt: endOfDay},
+  })
     .populate('upcomingTokenIds')
     .lean();
 
@@ -245,96 +250,173 @@ export const getQueueStatus = asyncHandler(async (req, res) => {
   );
 });
 
-// Update token status
-
 export const updateTokenStatus = asyncHandler(async (req, res) => {
   const {tokenId} = req.params;
   const {checkInOutStatus} = req.body;
+  const {socket} = req.io;
 
-  // Find the token
   const token = await UserToken.findById(tokenId);
   if (!token) throw new ApiError(404, 'Token not found');
 
-  // Find the queue containing this token
-  const queue = await Queue.findOne({upcomingTokenIds: tokenId}).populate(
-    'upcomingTokenIds'
-  );
-  if (!queue) throw new ApiError(404, 'Queue not found');
+  const doctorsQueue = await Queue.findOne({
+    upcomingTokenIds: tokenId,
+  }).populate('upcomingTokenIds');
+  if (!doctorsQueue) throw new ApiError(404, 'Queue not found');
+
+  let queue = doctorsQueue;
+  // console.log(queue);
 
   switch (checkInOutStatus) {
     case 'onsite':
-      // If the token is being marked as onsite
       token.checkInOutStatus = checkInOutStatus;
-
-      // If no token is currently active, make this token active
-      if (!queue.activeTokenId || queue.activeTokenId === '') {
-        token.isActive = true;
-        queue.activeTokenId = token._id;
-      }
-      break;
-
     case 'completed':
-      // If the token is being marked as completed
       if (token.checkInOutStatus !== 'onsite') {
         throw new ApiError(400, 'Token must be onsite before completion');
       }
-
-      // Mark the current token as completed
-      token.checkInOutStatus = checkInOutStatus;
       token.isActive = false;
-      token.checkedOutTime = new Date();
+      token.checkInOutStatus = checkInOutStatus;
+      token.checkedOutTime = addHours(new Date(), 5);
 
-      // Calculate the offset if the token is completed before or after the estimated turn time
-      if (token.estimatedTurnTime) {
-        const estimatedTurnTime = moment(token.estimatedTurnTime);
-        const checkedOutTime = moment(token.checkedOutTime);
-        const offset = checkedOutTime.diff(estimatedTurnTime, 'minutes');
+      const activeItem = queue.upcomingTokenIds.find(
+        (item) => item.isActive === false && item.checkInOutStatus === 'onsite'
+      );
+      const hasItemsBehind = activeItem
+        ? queue.upcomingTokenIds.some(
+            (item) =>
+              item.tokenNumber < activeItem.tokenNumber &&
+              item.isActive === false
+          )
+        : false;
 
-        // Update the offset in the Queue table for today
-        queue.offset = offset;
-      }
+      console.log('activeItem', hasItemsBehind);
+      if (!hasItemsBehind) {
+        const firstTrueIndex = queue.upcomingTokenIds.findIndex(
+          (item) => item.checkInOutStatus === 'onsite'
+        );
 
-      // Find the next token to make active
-      const nextOnsiteToken = queue.upcomingTokenIds
-        .filter(
-          (t) => t.checkInOutStatus === 'onsite' && t._id.toString() !== tokenId
-        )
-        .sort((a, b) => a.tokenNumber - b.tokenNumber)[0];
-
-      if (nextOnsiteToken) {
-        // If there is a token with onsite status, make it active
-        nextOnsiteToken.isActive = true;
-        queue.activeTokenId = nextOnsiteToken._id;
-        // await nextOnsiteToken.save();
+        const nextToken = queue.upcomingTokenIds[firstTrueIndex + 1];
+        const currentTime = addHours(new Date(), 5);
+        const offset = differenceInMinutes(
+          currentTime,
+          nextToken.estimatedTurnTime
+        );
+        io.emit('tokenUpdate', {
+          data: {offset: offset, case: 1},
+          message: 'Est. turn time updated successfully',
+          success: true,
+        });
       } else {
-        // If no token is onsite, set active token to ""
-        queue.activeTokenId = '';
-      }
-      break;
+        const duration = differenceInMinutes(
+          token.checkedOutTime,
+          token.tokenActivationTime
+        );
+        const newCalculatedOffset = duration - 10; // here 10 represent avg time for doctor to check patients
 
-    default:
-      throw new ApiError(400, 'Invalid status');
+        const pendingTokenNumbers = queue.upcomingTokenIds
+          .filter(
+            (item) =>
+              item.tokenNumber < activeItem.tokenNumber &&
+              item.isActive === false
+          )
+          .map((item) => item.tokenNumber);
+
+        console.log('OFFSET : ', newCalculatedOffset, queue.offset);
+
+        io.emit('tokenUpdate', {
+          data: {
+            offset: queue.offset + newCalculatedOffset,
+            case: 2,
+            tokens: pendingTokenNumbers,
+          },
+          message: 'Est. turn time updated successfully',
+          success: true,
+        });
+      }
   }
 
-  // Save the updated token and queue
+  //   case 'onsite':
+  //     token.checkInOutStatus = checkInOutStatus;
+  //     if (!queue.activeTokenId || queue.activeTokenId === '') {
+  //       token.isActive = true;
+  //       queue.activeTokenId = token._id;
+  //     }
+  //     break;
+
+  //   case 'completed':
+  // if (token.checkInOutStatus !== 'onsite') {
+  //   throw new ApiError(400, 'Token must be onsite before completion');
+  // }
+
+  //     token.checkInOutStatus = checkInOutStatus;
+  //     token.isActive = false;
+  //     token.checkedOutTime = addHours(new Date(), 5);
+
+  //     const actualFreeTime = addHours(new Date(), 5);
+
+  //     const remainingTokens = queue.upcomingTokenIds.filter(
+  //       (t) => t._id.toString() !== tokenId
+  //     );
+
+  //     let nextActiveToken = remainingTokens.find(
+  //       (t) => t.checkInOutStatus === 'onsite'
+  //     );
+
+  //     if (!nextActiveToken) {
+  //       nextActiveToken = remainingTokens[0]; // Assign next in line if no onsite token
+  //     }
+
+  //     if (nextActiveToken) {
+  //       const estimatedFreeTime = token.estimatedTurnTime;
+  //       // const offset = differenceInMinutes(actualFreeTime, estimatedFreeTime);
+  //       const offset = 2;
+  //       // queue.offset = offset;
+  //       nextActiveToken.isActive = true;
+  //       // queue.activeTokenId = nextActiveToken._id;
+
+  //       console.log('remainingTokens : ', remainingTokens);
+
+  //       const bulkUpdates = remainingTokens.map((t, index) => {
+  //         const newEstimatedTime =
+  //           index === 0
+  //             ? actualFreeTime
+  //             : addMinutes(
+  //                 remainingTokens[index - 1].estimatedTurnTime,
+  //                 10 + offset
+  //               );
+  //         console.log('new Estimated time : ', newEstimatedTime);
+  //         return {
+  //           updateOne: {
+  //             filter: {_id: t._id},
+  //             update: {$set: {estimatedTurnTime: newEstimatedTime}},
+  //           },
+  //         };
+  //       });
+
+  //       // await UserToken.bulkWrite(bulkUpdates);
+  //     }
+
+  //     break;
+
+  //   default:
+  //     throw new ApiError(400, 'Invalid status');
+  // }
+
   // await token.save();
   // await queue.save();
 
-  // Populate the userId field for the response
-  await token.populate('userId', 'name email');
+  // await token.populate('userId', 'name email');
 
-  // Emit event for token updates
   io.emit('TokenUpdated', {
     data: token,
     message: 'Token status updated successfully',
     success: true,
   });
 
-  // Send response
   res.json(new ApiResponse(200, token, 'Token status updated successfully'));
 });
 
 // Get token history
+
 export const getTokenHistory = asyncHandler(async (req, res) => {
   // const tokens = await UserToken.find({userId: req.user._id})
   //   .populate('timeSlot', 'date clinicOpeningTime clinicClosingTime')
@@ -367,13 +449,19 @@ export const getTokensByDate = asyncHandler(async (req, res) => {
 
 export const getActiveToken = asyncHandler(async (req, res) => {
   const socket = req.io;
-  // // console.log(req.io);
   const {date} = req.body;
+
+  const targetDate = new Date(date);
 
   if (!date) throw new ApiError(400, 'Date query parameter is required');
 
+  const startOfDay = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
+  const endOfDay = addHours(new Date(targetDate.setHours(23, 59, 59, 999)), 5);
+
+  console.log(startOfDay, endOfDay);
+
   const tokens = await UserToken.findOne({
-    date: date,
+    date: {$gte: startOfDay, $lt: endOfDay},
     isActive: true,
   });
 

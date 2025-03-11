@@ -168,7 +168,6 @@ const resendOTP = asyncHandler(async (req, res) => {
   // if (user.otpExpiry && user.otpExpiry > new Date()) {
   //   throw new ApiError(429, "Please wait before requesting a new OTP.");
   // }
-  console.log('first');
 
   const newOtp = generateOTP();
   user.otp = hashOTP(newOtp);
