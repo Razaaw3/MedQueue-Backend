@@ -142,7 +142,6 @@ export const generateToken = asyncHandler(async (req, res) => {
   }
 
   // Get last token number for the day
-  console.log(requestedDate);
   const lastTokenOfDay = await UserToken.findOne({
     date: addHours(parseISO(requestedDate), 5),
   });
@@ -259,16 +258,60 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
   if (!token) throw new ApiError(404, 'Token not found');
 
   const doctorsQueue = await Queue.findOne({
-    upcomingTokenIds: tokenId,
-  }).populate('upcomingTokenIds');
+    upcomingTokenIds: {$in: [tokenId]},
+  }).populate('upcomingTokenIds lastTokenId');
   if (!doctorsQueue) throw new ApiError(404, 'Queue not found');
 
   let queue = doctorsQueue;
-  // console.log(queue);
 
   switch (checkInOutStatus) {
     case 'onsite':
       token.checkInOutStatus = checkInOutStatus;
+
+      //exceptional case handling remaining
+
+      if (!queue.activeTokenId) {
+        token.isActive = true;
+        const currentTime = addHours(new Date(), 5);
+        const waitTime = differenceInMinutes(
+          currentTime,
+          queue.lastTokenId.checkedOutTime
+        );
+        if (queue.lastTokenId.tokenNumber + 1 === token.tokenNumber) {
+          queue.waitTime = queue.waitTime + waitTime;
+
+          io.emit('tokenUpdate', {
+            data: {
+              offset: queue.offset,
+              case: 3,
+            },
+            message: 'Est. turn time updated successfully',
+            success: true,
+          });
+        } else {
+          const recentToken = queue.upcomingTokenIds.find(
+            (token) => token.estimatedTurnTime <= currentTime
+          );
+
+          const offset = differenceInMinutes(
+            currentTime,
+            recentToken.estimatedTurnTime
+          );
+
+          const exceptional = queue.upcomingTokenIds
+            .filter(
+              (token) =>
+                token.estimatedTurnTime < currentTime &&
+                token.checkInOutStatus === 'pending'
+            )
+            .map((token) => token.tokenNumber);
+
+          queue.offset = offset;
+
+          queue.exceptional = exceptional;
+        }
+      }
+
     case 'completed':
       if (token.checkInOutStatus !== 'onsite') {
         throw new ApiError(400, 'Token must be onsite before completion');
@@ -277,60 +320,79 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
       token.checkInOutStatus = checkInOutStatus;
       token.checkedOutTime = addHours(new Date(), 5);
 
-      const activeItem = queue.upcomingTokenIds.find(
-        (item) => item.isActive === false && item.checkInOutStatus === 'onsite'
-      );
-      const hasItemsBehind = activeItem
-        ? queue.upcomingTokenIds.some(
-            (item) =>
-              item.tokenNumber < activeItem.tokenNumber &&
-              item.isActive === false
-          )
-        : false;
-
-      console.log('activeItem', hasItemsBehind);
-      if (!hasItemsBehind) {
-        const firstTrueIndex = queue.upcomingTokenIds.findIndex(
-          (item) => item.checkInOutStatus === 'onsite'
+      if (!queue.exceptional.includes(token.tokenNumber)) {
+        const activeItem = queue.upcomingTokenIds.find(
+          (item) =>
+            item.isActive === false && item.checkInOutStatus === 'onsite'
         );
+        const hasItemsBehind = activeItem
+          ? queue.upcomingTokenIds.some(
+              (item) =>
+                item.tokenNumber < activeItem.tokenNumber &&
+                item.isActive === false &&
+                !queue.exceptional.includes(item.tokeNumber)
+            )
+          : false;
 
-        const nextToken = queue.upcomingTokenIds[firstTrueIndex + 1];
-        const currentTime = addHours(new Date(), 5);
-        const offset = differenceInMinutes(
-          currentTime,
-          nextToken.estimatedTurnTime
-        );
-        io.emit('tokenUpdate', {
-          data: {offset: offset, case: 1},
-          message: 'Est. turn time updated successfully',
-          success: true,
-        });
+        if (!activeItem) {
+          queue.waitTime = queue.offset;
+          queue.activeTokenId = null;
+          queue.lastTokenId = token._id;
+
+          io.emit('tokenUpdate', {
+            data: {
+              offset: queue.offset,
+              case: 3,
+            },
+            message: 'Est. turn time updated successfully',
+            success: true,
+          });
+        } else if (!hasItemsBehind) {
+          const firstTrueIndex = queue.upcomingTokenIds.findIndex(
+            (item) => item.checkInOutStatus === 'onsite'
+          );
+
+          const nextToken = queue.upcomingTokenIds[firstTrueIndex + 1];
+          const currentTime = addHours(new Date(), 5);
+          const offset = differenceInMinutes(
+            currentTime,
+            nextToken.estimatedTurnTime
+          );
+          io.emit('tokenUpdate', {
+            data: {offset: offset, case: 1, waitTime: queue.waitTime},
+            message: 'Est. turn time updated successfully',
+            success: true,
+          });
+        } else {
+          const duration = differenceInMinutes(
+            token.checkedOutTime,
+            token.tokenActivationTime
+          );
+          const newCalculatedOffset = duration - 10; // here 10 represent avg time for doctor to check patients
+
+          const pendingTokenNumbers = queue.upcomingTokenIds
+            .filter(
+              (item) =>
+                item.tokenNumber < activeItem.tokenNumber &&
+                item.isActive === false
+            )
+            .map((item) => item.tokenNumber);
+
+          io.emit('tokenUpdate', {
+            data: {
+              offset: queue.offset + newCalculatedOffset,
+              case: 2,
+              tokens: pendingTokenNumbers,
+              waitTime: queue.waitTime,
+            },
+            message: 'Est. turn time updated successfully',
+            success: true,
+          });
+        }
       } else {
-        const duration = differenceInMinutes(
-          token.checkedOutTime,
-          token.tokenActivationTime
+        queue.exceptional = queue.exceptional.filter(
+          (item) => item.tokenNumber !== token.tokenNumber
         );
-        const newCalculatedOffset = duration - 10; // here 10 represent avg time for doctor to check patients
-
-        const pendingTokenNumbers = queue.upcomingTokenIds
-          .filter(
-            (item) =>
-              item.tokenNumber < activeItem.tokenNumber &&
-              item.isActive === false
-          )
-          .map((item) => item.tokenNumber);
-
-        console.log('OFFSET : ', newCalculatedOffset, queue.offset);
-
-        io.emit('tokenUpdate', {
-          data: {
-            offset: queue.offset + newCalculatedOffset,
-            case: 2,
-            tokens: pendingTokenNumbers,
-          },
-          message: 'Est. turn time updated successfully',
-          success: true,
-        });
       }
   }
 
@@ -457,8 +519,6 @@ export const getActiveToken = asyncHandler(async (req, res) => {
 
   const startOfDay = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
   const endOfDay = addHours(new Date(targetDate.setHours(23, 59, 59, 999)), 5);
-
-  console.log(startOfDay, endOfDay);
 
   const tokens = await UserToken.findOne({
     date: {$gte: startOfDay, $lt: endOfDay},

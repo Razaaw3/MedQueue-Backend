@@ -7,6 +7,11 @@ const queueSchema = new mongoose.Schema(
       ref: 'UserToken',
       default: null,
     },
+    lastTokenId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'UserToken',
+      default: null,
+    },
     date: {
       type: Date,
       required: true,
@@ -16,10 +21,20 @@ const queueSchema = new mongoose.Schema(
       required: true,
       default: 0, // Default to UTC+0 (00:00)
     },
+    waitTime: {
+      type: Number, // Offset in minutes from UTC (e.g., +300 for UTC+5)
+      required: true,
+      default: 0, // Default to UTC+0 (00:00)
+    },
     upcomingTokenIds: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'UserToken',
+      },
+    ],
+    exceptional: [
+      {
+        type: Number,
       },
     ],
   },
