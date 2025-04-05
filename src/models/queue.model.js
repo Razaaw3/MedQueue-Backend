@@ -26,6 +26,12 @@ const queueSchema = new mongoose.Schema(
       required: true,
       default: 0, // Default to UTC+0 (00:00)
     },
+    pendingTokens: [
+      {
+        tokenNumber: {type: Number, required: true},
+        tokenOffset: {type: Number, required: true}, // Default offset of 10 mins
+      },
+    ],
     upcomingTokenIds: [
       {
         type: mongoose.Schema.Types.ObjectId,

@@ -8,6 +8,7 @@ import {io} from '../../index.js';
 import Clinic from '../models/clinic.model.js';
 import moment from 'moment';
 import {tz, TZDate} from '@date-fns/tz';
+import DoctorDetail from '../models/doctorDetail.model.js';
 
 import {
   parseISO,
@@ -156,6 +157,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     checkInOutStatus: 'pending',
     isActive: isActive,
     tokenGenerationTime: addHours(parseISO(today), 5),
+    estimatedEndTime: addMinutes(estimatedTurnTime, 10),
   });
 
   await userToken.save();
@@ -252,7 +254,6 @@ export const getQueueStatus = asyncHandler(async (req, res) => {
 export const updateTokenStatus = asyncHandler(async (req, res) => {
   const {tokenId} = req.params;
   const {checkInOutStatus} = req.body;
-  const {socket} = req.io;
 
   const token = await UserToken.findById(tokenId);
   if (!token) throw new ApiError(404, 'Token not found');
@@ -264,53 +265,64 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 
   let queue = doctorsQueue;
 
+  const currentTime = addHours(new Date(), 5);
+
   switch (checkInOutStatus) {
     case 'onsite':
+      const isValid = currentTime <= addMinutes(token.estimatedTurnTime, 10);
       token.checkInOutStatus = checkInOutStatus;
-
-      //exceptional case handling remaining
-
-      if (!queue.activeTokenId) {
-        token.isActive = true;
-        const currentTime = addHours(new Date(), 5);
-        const waitTime = differenceInMinutes(
-          currentTime,
-          queue.lastTokenId.checkedOutTime
-        );
-        if (queue.lastTokenId.tokenNumber + 1 === token.tokenNumber) {
-          queue.waitTime = queue.waitTime + waitTime;
-
-          io.emit('tokenUpdate', {
-            data: {
-              offset: queue.offset,
-              case: 3,
-            },
-            message: 'Est. turn time updated successfully',
-            success: true,
-          });
-        } else {
-          const recentToken = queue.upcomingTokenIds.find(
-            (token) => token.estimatedTurnTime <= currentTime
-          );
-
-          const offset = differenceInMinutes(
+      let waitTime = 0;
+      if (queue.lastTokenId) {
+        if (!queue.activeTokenId) {
+          waitTime = differenceInMinutes(
             currentTime,
-            recentToken.estimatedTurnTime
+            queue.lastTokenId.checkedOutTime
           );
+          waitTime = waitTime + queue.offset;
 
-          const exceptional = queue.upcomingTokenIds
-            .filter(
-              (token) =>
-                token.estimatedTurnTime < currentTime &&
-                token.checkInOutStatus === 'pending'
-            )
-            .map((token) => token.tokenNumber);
+          token.isActive = true;
+        } else {
+          if (!isValid)
+            queue.exceptional = [
+              ...(queue.exceptional || []),
+              token.tokenNumber,
+            ];
+        }
+      } else {
+        if (queue.activeTokenId) {
+          if (!isValid)
+            queue.exceptional = [
+              ...(queue.exceptional || []),
+              token.tokenNumber,
+            ];
+        } else {
+          const doc = await DoctorDetail.find({}).lean();
+          if (doc.available) {
+            const clinic = await Clinic.find({}).lean();
+            const parsedDate = parse(
+              clinic.clinicOpeningTime,
+              'hh:mm a',
+              new Date()
+            );
 
-          queue.offset = offset;
-
-          queue.exceptional = exceptional;
+            token.isActive = true;
+            const offset = differenceInMinutes(
+              differenceInMinutes(currentTime, addHours(parsedDate, 5)),
+              10
+            );
+            io.emit('tokenUpdate', {
+              data: {
+                offset: offset + queue.offset,
+                waitTime: queue.waitTime,
+                exceptional: queue.exceptional,
+              },
+              message: 'Est. turn time updated successfully',
+              success: true,
+            });
+          }
         }
       }
+      break;
 
     case 'completed':
       if (token.checkInOutStatus !== 'onsite') {
@@ -320,162 +332,243 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
       token.checkInOutStatus = checkInOutStatus;
       token.checkedOutTime = addHours(new Date(), 5);
 
-      if (!queue.exceptional.includes(token.tokenNumber)) {
-        const activeItem = queue.upcomingTokenIds.find(
-          (item) =>
-            item.isActive === false && item.checkInOutStatus === 'onsite'
+      const firstTrueIndex = queue.upcomingTokenIds.findIndex(
+        (item) =>
+          item.checkInOutStatus === 'onsite' &&
+          item.tokenNumber !== token.tokenNumber
+      );
+
+      if (firstTrueIndex !== -1) {
+        const nextToken = queue.upcomingTokenIds[firstTrueIndex];
+        const offset = differenceInMinutes(
+          differenceInMinutes(currentTime, token.tokenActivationTime),
+          10
         );
-        const hasItemsBehind = activeItem
-          ? queue.upcomingTokenIds.some(
-              (item) =>
-                item.tokenNumber < activeItem.tokenNumber &&
-                item.isActive === false &&
-                !queue.exceptional.includes(item.tokeNumber)
-            )
-          : false;
 
-        if (!activeItem) {
-          queue.waitTime = queue.offset;
-          queue.activeTokenId = null;
-          queue.lastTokenId = token._id;
-
-          io.emit('tokenUpdate', {
-            data: {
-              offset: queue.offset,
-              case: 3,
-            },
-            message: 'Est. turn time updated successfully',
-            success: true,
-          });
-        } else if (!hasItemsBehind) {
-          const firstTrueIndex = queue.upcomingTokenIds.findIndex(
-            (item) => item.checkInOutStatus === 'onsite'
-          );
-
-          const nextToken = queue.upcomingTokenIds[firstTrueIndex + 1];
-          const currentTime = addHours(new Date(), 5);
-          const offset = differenceInMinutes(
-            currentTime,
-            nextToken.estimatedTurnTime
-          );
-          io.emit('tokenUpdate', {
-            data: {offset: offset, case: 1, waitTime: queue.waitTime},
-            message: 'Est. turn time updated successfully',
-            success: true,
-          });
-        } else {
-          const duration = differenceInMinutes(
-            token.checkedOutTime,
-            token.tokenActivationTime
-          );
-          const newCalculatedOffset = duration - 10; // here 10 represent avg time for doctor to check patients
-
-          const pendingTokenNumbers = queue.upcomingTokenIds
-            .filter(
-              (item) =>
-                item.tokenNumber < activeItem.tokenNumber &&
-                item.isActive === false
-            )
-            .map((item) => item.tokenNumber);
-
-          io.emit('tokenUpdate', {
-            data: {
-              offset: queue.offset + newCalculatedOffset,
-              case: 2,
-              tokens: pendingTokenNumbers,
-              waitTime: queue.waitTime,
-            },
-            message: 'Est. turn time updated successfully',
-            success: true,
-          });
-        }
+        queue.activeTokenId = nextToken._id;
+        nextToken.tokenActivationTime = currentTime;
+        io.emit('tokenUpdate', {
+          data: {
+            offset: offset + queue.offset,
+            waitTime: queue.waitTime,
+            exceptional: queue.exceptional,
+          },
+          message: 'Est. turn time updated successfully',
+          success: true,
+        });
+        await nextToken.save();
       } else {
-        queue.exceptional = queue.exceptional.filter(
-          (item) => item.tokenNumber !== token.tokenNumber
-        );
+        queue.activeTokenId = null;
       }
+
+      queue.lastTokenId = token._id;
+      break;
+    default:
+      throw new ApiError(400, 'Bad status for token');
   }
-
-  //   case 'onsite':
-  //     token.checkInOutStatus = checkInOutStatus;
-  //     if (!queue.activeTokenId || queue.activeTokenId === '') {
-  //       token.isActive = true;
-  //       queue.activeTokenId = token._id;
-  //     }
-  //     break;
-
-  //   case 'completed':
-  // if (token.checkInOutStatus !== 'onsite') {
-  //   throw new ApiError(400, 'Token must be onsite before completion');
-  // }
-
-  //     token.checkInOutStatus = checkInOutStatus;
-  //     token.isActive = false;
-  //     token.checkedOutTime = addHours(new Date(), 5);
-
-  //     const actualFreeTime = addHours(new Date(), 5);
-
-  //     const remainingTokens = queue.upcomingTokenIds.filter(
-  //       (t) => t._id.toString() !== tokenId
-  //     );
-
-  //     let nextActiveToken = remainingTokens.find(
-  //       (t) => t.checkInOutStatus === 'onsite'
-  //     );
-
-  //     if (!nextActiveToken) {
-  //       nextActiveToken = remainingTokens[0]; // Assign next in line if no onsite token
-  //     }
-
-  //     if (nextActiveToken) {
-  //       const estimatedFreeTime = token.estimatedTurnTime;
-  //       // const offset = differenceInMinutes(actualFreeTime, estimatedFreeTime);
-  //       const offset = 2;
-  //       // queue.offset = offset;
-  //       nextActiveToken.isActive = true;
-  //       // queue.activeTokenId = nextActiveToken._id;
-
-  //       console.log('remainingTokens : ', remainingTokens);
-
-  //       const bulkUpdates = remainingTokens.map((t, index) => {
-  //         const newEstimatedTime =
-  //           index === 0
-  //             ? actualFreeTime
-  //             : addMinutes(
-  //                 remainingTokens[index - 1].estimatedTurnTime,
-  //                 10 + offset
-  //               );
-  //         console.log('new Estimated time : ', newEstimatedTime);
-  //         return {
-  //           updateOne: {
-  //             filter: {_id: t._id},
-  //             update: {$set: {estimatedTurnTime: newEstimatedTime}},
-  //           },
-  //         };
-  //       });
-
-  //       // await UserToken.bulkWrite(bulkUpdates);
-  //     }
-
-  //     break;
-
-  //   default:
-  //     throw new ApiError(400, 'Invalid status');
-  // }
-
-  // await token.save();
-  // await queue.save();
-
-  // await token.populate('userId', 'name email');
-
-  io.emit('TokenUpdated', {
-    data: token,
-    message: 'Token status updated successfully',
-    success: true,
-  });
+  await queue.save();
+  await token.save();
 
   res.json(new ApiResponse(200, token, 'Token status updated successfully'));
 });
+
+// export const updateTokenStatus = asyncHandler(async (req, res) => {
+// const {tokenId} = req.params;
+// const {checkInOutStatus} = req.body;
+
+// const token = await UserToken.findById(tokenId);
+// if (!token) throw new ApiError(404, 'Token not found');
+
+// const doctorsQueue = await Queue.findOne({
+//   upcomingTokenIds: {$in: [tokenId]},
+// }).populate('upcomingTokenIds lastTokenId');
+// if (!doctorsQueue) throw new ApiError(404, 'Queue not found');
+
+//   let queue = doctorsQueue;
+
+//   switch (checkInOutStatus) {
+//     case 'onsite':
+//       token.checkInOutStatus = checkInOutStatus;
+
+//       //exceptional case handling remaining
+
+//       if (!queue.activeTokenId) {
+//         token.isActive = true;
+//         const currentTime = addHours(new Date(), 5);
+//         const waitTime = differenceInMinutes(
+//           currentTime,
+//           queue.lastTokenId.checkedOutTime
+//         );
+//         if (queue.lastTokenId.tokenNumber + 1 === token.tokenNumber) {
+//           queue.waitTime = queue.waitTime + waitTime;
+
+//           io.emit('tokenUpdate', {
+//             data: {
+//               offset: queue.offset,
+//               case: 4,
+//             },
+//             message: 'Est. turn time updated successfully',
+//             success: true,
+//           });
+//         } else {
+//           const recentToken = queue.upcomingTokenIds.find((token) => {
+//             const estimatedTime = token.estimatedTurnTime;
+
+//             // Check if currentTime lies within the estimatedTime and estimatedTime +10 min
+//             const isValid = isWithinInterval(currentTime, {
+//               start: estimatedTime,
+//               end: addMinutes(estimatedTime, 10),
+//             });
+
+//             if (isValid) {
+//               const offset = differenceInMinutes(currentTime, estimatedTime);
+//               return {token, offset};
+//             }
+
+//             return false;
+//           });
+
+//           const offset = recentToken.offset || {};
+
+//           const exceptional = queue.upcomingTokenIds
+//             .filter(
+//               (token) =>
+//                 token.estimatedTurnTime < currentTime &&
+//                 token.checkInOutStatus === 'pending'
+//             )
+//             .map((token) => token.tokenNumber);
+
+//           queue.offset = offset;
+//           queue.exceptional = exceptional;
+
+//           io.emit('tokenUpdate', {
+//             data: {
+//               offset: queue.offset,
+//               case: 5,
+//               exceptional: exceptional,
+//             },
+//             message: 'Est. turn time updated successfully',
+//             success: true,
+//           });
+//         }
+//       }
+//       break;
+
+//     case 'completed':
+// if (token.checkInOutStatus !== 'onsite') {
+//   throw new ApiError(400, 'Token must be onsite before completion');
+// }
+// token.isActive = false;
+// token.checkInOutStatus = checkInOutStatus;
+// token.checkedOutTime = addHours(new Date(), 5);
+
+//       if (!queue.exceptional.includes(token.tokenNumber)) {
+//         const activeItem = queue.upcomingTokenIds.find(
+//           (item) =>
+//             item.isActive === false && item.checkInOutStatus === 'onsite'
+//         );
+//         const hasItemsBehind = activeItem
+//           ? queue.upcomingTokenIds.some(
+//               (item) =>
+//                 item.tokenNumber < activeItem.tokenNumber &&
+//                 item.isActive === false &&
+//                 !queue.exceptional.includes(item.tokenNumber)
+//             )
+//           : false;
+
+//         if (!activeItem) {
+//           queue.waitTime = queue.offset;
+//           queue.activeTokenId = null;
+//           queue.lastTokenId = token._id;
+
+//           io.emit('tokenUpdate', {
+//             data: {
+//               offset: queue.offset,
+//               case: 3,
+//             },
+//             message: 'Est. turn time updated successfully',
+//             success: true,
+//           });
+//         } else if (!hasItemsBehind) {
+// const firstTrueIndex = queue.upcomingTokenIds.findIndex(
+//   (item) => item.checkInOutStatus === 'onsite'
+// );
+
+// const nextToken = queue.upcomingTokenIds[firstTrueIndex + 1];
+// const currentTime = addHours(new Date(), 5);
+// const offset = differenceInMinutes(
+//   currentTime,
+//   nextToken.estimatedTurnTime
+// );
+// io.emit('tokenUpdate', {
+//   data: {offset: offset, case: 1, waitTime: queue.waitTime},
+//   message: 'Est. turn time updated successfully',
+//   success: true,
+// });
+//         } else {
+//           const duration = differenceInMinutes(
+//             token.checkedOutTime,
+//             token.tokenActivationTime
+//           );
+//           const newCalculatedOffset = duration - 10; // 10 represents avg time per patient
+
+//           // Increase offset for existing tokens in queue.pendingTokens
+//           const updatedPendingTokens = queue.pendingTokens.map((token) => ({
+//             tokenNumber: token.tokenNumber,
+//             tokenOffset: token.tokenOffset + 10, // Increase existing offset by 10
+//           }));
+
+//           // Add new tokens from upcomingTokenIds
+//           const newPendingTokens = queue.upcomingTokenIds
+//             .filter(
+//               (item) =>
+//                 item.tokenNumber < activeItem.tokenNumber &&
+//                 item.isActive === false &&
+//                 !queue.exceptional.includes(item.tokenNumber)
+//             )
+//             .map((item) => ({
+//               tokenNumber: item.tokenNumber,
+//               tokenOffset: 10, // Newly added tokens get offset 10
+//             }));
+
+//           // Merge both lists
+//           const pendingTokenNumbers = [
+//             ...updatedPendingTokens,
+//             ...newPendingTokens,
+//           ];
+
+//           io.emit('tokenUpdate', {
+//             data: {
+//               offset: queue.offset + newCalculatedOffset,
+//               case: 2,
+//               tokens: pendingTokenNumbers,
+//               waitTime: queue.waitTime,
+//             },
+//             message: 'Est. turn time updated successfully',
+//             success: true,
+//           });
+//         }
+//       } else {
+//         queue.exceptional = queue.exceptional.filter(
+//           (item) => item.tokenNumber !== token.tokenNumber
+//         );
+//       }
+//       break;
+//   }
+
+//   // await token.save();
+//   // await queue.save();
+
+//   // await token.populate('userId', 'name email');
+
+//   io.emit('TokenUpdated', {
+//     data: token,
+//     message: 'Token status updated successfully',
+//     success: true,
+//   });
+
+//   res.json(new ApiResponse(200, token, 'Token status updated successfully'));
+// });
 
 // Get token history
 
