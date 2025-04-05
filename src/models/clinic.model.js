@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const clinicSchema = new mongoose.Schema(
   {
@@ -17,6 +17,13 @@ const clinicSchema = new mongoose.Schema(
       required: true,
       match: /^([0-9]{1,2}):([0-9]{2})\s?(AM|PM)?$/,
     },
+    tokenLimit: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 1000,
+      default: 150,
+    },
   },
   {
     timestamps: true,
@@ -24,7 +31,7 @@ const clinicSchema = new mongoose.Schema(
 );
 
 // Ensure only one clinic settings document exists
-clinicSchema.index({}, {unique: true});
+clinicSchema.index({}, { unique: true });
 
-const Clinic = mongoose.model('Clinic', clinicSchema);
+const Clinic = mongoose.model("Clinic", clinicSchema);
 export default Clinic;
