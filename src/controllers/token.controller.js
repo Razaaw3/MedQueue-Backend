@@ -132,6 +132,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     const lastTokenId =
       queue.upcomingTokenIds[queue.upcomingTokenIds.length - 1];
     const lastToken = await UserToken.findById(lastTokenId);
+    console.log('if', lastTokenId);
 
     estimatedTurnTime = addMinutes(
       lastToken.estimatedTurnTime,
