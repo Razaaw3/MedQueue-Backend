@@ -1,5 +1,4 @@
 import Queue from '../models/queue.model.js';
-// import TimeSlots from '../models/timeSlots.model.js';
 import UserToken from '../models/userToken.model.js';
 import ApiError from '../utils/errors/ApiError.js';
 import {ApiResponse} from '../utils/errors/ApiResponse.js';
@@ -23,6 +22,7 @@ import {
   formatISO,
   addHours,
   differenceInMinutes,
+  setHours,
 } from 'date-fns';
 
 export const generateToken = asyncHandler(async (req, res) => {
@@ -52,15 +52,15 @@ export const generateToken = asyncHandler(async (req, res) => {
   );
   let today = TZDate.tz('Asia/Karachi').toISOString();
 
-  // //Uncomment the below feature if you are done with the development
+  // // //Uncomment the below feature if you are done with the development
 
-  if (
-    !isSameDay(requestedDate, today, {
-      in: tz('Asia/Karachi'),
-    })
-  ) {
-    throw new ApiError(400, 'Cannot generate tokens for past or future dates.');
-  }
+  // if (
+  //   !isSameDay(requestedDate, today, {
+  //     in: tz("Asia/Karachi"),
+  //   })
+  // ) {
+  //   throw new ApiError(400, "Cannot generate tokens for past or future dates.");
+  // }
 
   // Check if user already has an active token for the selected date
   const existingToken = await UserToken.findOne({
@@ -73,30 +73,42 @@ export const generateToken = asyncHandler(async (req, res) => {
   }
 
   // Convert clinic opening and closing times to today’s full DateTime
-  const clinicOpenStoredTime = parse(
-    clinic.clinicOpeningTime,
-    'hh:mm a',
-    today
+  // const clinicOpenStoredTime = parse(
+  //   clinic.clinicOpeningTime,
+  //   'hh:mm a',
+  //   today
+  // );
+
+  const [openingHours, openingMinutes] = clinic.clinicOpeningTime
+    .split(':')
+    .map(Number);
+
+  const todayWithTime = addHours(
+    set(today, {
+      hours: openingHours,
+      minutes: openingMinutes,
+      seconds: 0,
+      milliseconds: 0,
+    }),
+    5
   );
-  const todayWithTime = set(today, {
-    hours: clinicOpenStoredTime.getHours(),
-    minutes: clinicOpenStoredTime.getMinutes(),
-    seconds: 0,
-    milliseconds: 0,
-  });
-  const clinicCloseStoredTime = parse(
-    clinic.clinicClosingTime,
-    'hh:mm a',
-    today
+
+  const [closingHours, closingMinutes] = clinic.clinicClosingTime
+    .split(':')
+    .map(Number);
+
+  const todayWithTimeClose = addHours(
+    set(today, {
+      hours: closingHours,
+      minutes: closingMinutes,
+      seconds: 0,
+      milliseconds: 0,
+    }),
+    5
   );
-  const todayWithTimeClose = set(today, {
-    hours: clinicCloseStoredTime.getHours(),
-    minutes: clinicCloseStoredTime.getMinutes(),
-    seconds: 0,
-    milliseconds: 0,
-  });
 
   const openingTime = new TZDate(todayWithTime, 'Asia/Karachi');
+
   const closingTime = new TZDate(
     todayWithTimeClose,
     'Asia/Karachi'
