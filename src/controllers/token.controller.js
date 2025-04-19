@@ -83,29 +83,23 @@ export const generateToken = asyncHandler(async (req, res) => {
     .split(':')
     .map(Number);
 
-  const todayWithTime = addHours(
-    set(today, {
-      hours: openingHours,
-      minutes: openingMinutes,
-      seconds: 0,
-      milliseconds: 0,
-    }),
-    5
-  );
+  const todayWithTime = set(today, {
+    hours: openingHours,
+    minutes: openingMinutes,
+    seconds: 0,
+    milliseconds: 0,
+  });
 
   const [closingHours, closingMinutes] = clinic.clinicClosingTime
     .split(':')
     .map(Number);
 
-  const todayWithTimeClose = addHours(
-    set(today, {
-      hours: closingHours,
-      minutes: closingMinutes,
-      seconds: 0,
-      milliseconds: 0,
-    }),
-    5
-  );
+  const todayWithTimeClose = set(today, {
+    hours: closingHours,
+    minutes: closingMinutes,
+    seconds: 0,
+    milliseconds: 0,
+  });
 
   const openingTime = new TZDate(todayWithTime, 'Asia/Karachi');
 
@@ -152,6 +146,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     ).toISOString();
   } else {
     estimatedTurnTime = openingTime.toISOString();
+    console.log(estimatedTurnTime);
     estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
   }
 
