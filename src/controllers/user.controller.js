@@ -1,65 +1,61 @@
-import User from '../models/user.model.js';
-import UserToken from '../models/userToken.model.js';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import ApiError from '../utils/errors/ApiError.js';
-import {ApiResponse} from '../utils/errors/ApiResponse.js';
-import {asyncHandler} from '../utils/errors/asyncHandler.js';
-import {uploadOnCloudinary} from '../utils/cloudinaryImageHandling.js';
-// import moment from "moment";
+import User from "../models/user.model.js";
+import ApiError from "../utils/errors/ApiError.js";
+import { ApiResponse } from "../utils/errors/ApiResponse.js";
+import { asyncHandler } from "../utils/errors/asyncHandler.js";
+import { uploadOnCloudinary } from "../utils/cloudinaryImageHandling.js";
 
 export const getUserProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select('-password');
+  const user = await User.findById(req.user._id).select("-password");
 
   if (!user) {
-    throw new ApiError(404, 'User not found');
+    throw new ApiError(404, "User not found");
   }
 
   res
     .status(200)
-    .json(new ApiResponse(200, user, 'User profile retrieved successfully'));
+    .json(new ApiResponse(200, user, "User profile retrieved successfully"));
 });
 
 export const updateUserProfile = asyncHandler(async (req, res) => {
-  const {name, dob, address, email} = req.body;
+  const { name, dob, address, email } = req.body;
 
   const user = await User.findByIdAndUpdate(
     req.user._id,
-    {name, dob, address, email},
-    {new: true}
-  ).select('-password');
+    { name, dob, address, email },
+    { new: true }
+  ).select("-password");
 
   if (!user) {
-    throw new ApiError(404, 'User not found');
+    throw new ApiError(404, "User not found");
   }
 
   res
     .status(200)
-    .json(new ApiResponse(200, user, 'User profile updated successfully'));
+    .json(new ApiResponse(200, user, "User profile updated successfully"));
 });
 
 export const updateProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) {
-    throw new ApiError(400, 'No image uploaded');
+    throw new ApiError(400, "No image uploaded");
   }
 
-  console.log('Uploaded file:', req.file);
+  console.log("Uploaded file:", req.file);
 
   // Upload to Cloudinary
   const profileResponse = await uploadOnCloudinary(req.file.path);
 
   if (!profileResponse) {
-    throw new ApiError(500, 'Failed to upload image to Cloudinary');
+    throw new ApiError(500, "Failed to upload image to Cloudinary");
   }
 
   const user = await User.findByIdAndUpdate(
     req.user._id,
-    {profile: profileResponse.url}, // Save Cloudinary URL
-    {new: true}
-  ).select('-password');
+    { profile: profileResponse.url }, // Save Cloudinary URL
+    { new: true }
+  ).select("-password");
 
   if (!user) {
-    throw new ApiError(404, 'User not found');
+    throw new ApiError(404, "User not found");
   }
 
   res
@@ -67,141 +63,85 @@ export const updateProfileImage = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(
         200,
-        {imageUrl: profileResponse.url},
-        'User profile updated successfully'
+        { imageUrl: profileResponse.url },
+        "User profile updated successfully"
       )
     );
 });
 
-export const getUserTokenHistory = asyncHandler(async (req, res) => {
-  const tokens = await UserToken.find({userId: req.user._id}).sort({
-    tokenGenerationTime: -1,
-  });
+// export const getUserToken = asyncHandler(async (req, res) => {
+//   const startOfDay = new Date();
+//   startOfDay.setHours(0, 0, 0, 0); // Set time to 00:00:00
 
-  res
-    .status(200)
-    .json(
-      new ApiResponse(200, tokens, 'User token history retrieved successfully')
-    );
-});
+//   const endOfDay = new Date();
+//   endOfDay.setHours(23, 59, 59, 999); // Set time to 23:59:59
 
-export const getUserToken = asyncHandler(async (req, res) => {
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0); // Set time to 00:00:00
+//   const tokens = await UserToken.findOne({
+//     userId: req.user._id,
+//     date: { $gte: startOfDay, $lt: endOfDay },
+//   }).select(
+//     "slotNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime tokenNumber checkedOutTime"
+//   );
 
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999); // Set time to 23:59:59
+//   res
+//     .status(200)
+//     .json(new ApiResponse(200, tokens, "User tokens retrieved successfully"));
+// });
 
-  const tokens = await UserToken.findOne({
-    userId: req.user._id,
-    date: {$gte: startOfDay, $lt: endOfDay},
-  }).select(
-    'slotNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime tokenNumber checkedOutTime'
-  );
+// export const getUserAppointmentsByStatus = asyncHandler(async (req, res) => {
+//   const { status } = req.query;
+//   if (!status || !["completed", "pending"].includes(status)) {
+//     throw new ApiError(
+//       400,
+//       "status query parameter must be either 'completed' or 'pending'"
+//     );
+//   }
 
-  res
-    .status(200)
-    .json(new ApiResponse(200, tokens, 'User tokens retrieved successfully'));
-});
+//   const query = {
+//     userId: req.user._id,
+//     checkInOutStatus: status,
+//   };
 
-export const upgradeToRegisteredUser = asyncHandler(async (req, res) => {
-  if (req.user.role !== 'guest') {
-    throw new ApiError(400, 'Only guests can upgrade to registered users');
-  }
+//   const appointments = await UserToken.find(query)
+//     .populate({
+//       path: "timeSlotId",
+//       select: "date timeSlots",
+//       populate: {
+//         path: "timeSlots",
+//         match: { slotNumber: { $exists: true } },
+//       },
+//     })
+//     .sort({ date: -1 })
+//     .select(
+//       "slotNumber tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime checkedOutTime"
+//     );
 
-  const {password} = req.body;
+//   console.log(appointments);
 
-  if (!password) {
-    throw new ApiError(400, 'Password is required');
-  }
+//   const transformedAppointments = appointments.map((apt) => {
+//     const timeSlot = apt.timeSlotId.timeSlots.find(
+//       (ts) => ts.slotNumber === apt.slotNumber
+//     );
+//     return {
+//       _id: apt._id,
+//       tokenNumber: apt.tokenNumber,
+//       timeSlot: `${timeSlot?.startingTime} - ${timeSlot?.endingTime}`,
+//       checkedOutTime: apt.checkedOutTime,
+//       date: apt.date,
+//       estimatedTurnTime: apt.estimatedTurnTime,
+//       checkInOutStatus: apt.checkInOutStatus,
+//       tokenGenerationTime: apt.tokenGenerationTime,
+//     };
+//   });
 
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  const updatedUser = await User.findByIdAndUpdate(
-    req.user._id,
-    {
-      role: 'registeredUser',
-      password: hashedPassword,
-    },
-    {new: true}
-  ).select('-password');
-
-  if (!updatedUser) {
-    throw new ApiError(404, 'User not found');
-  }
-
-  const token = jwt.sign(
-    {_id: updatedUser._id, role: 'registeredUser'},
-    process.env.JWT_SECRET,
-    {expiresIn: '7d'}
-  );
-
-  const response = {
-    ...updatedUser,
-    token,
-  };
-
-  res
-    .status(200)
-    .json(
-      new ApiResponse(200, response, 'User upgraded to registered successfully')
-    );
-});
-
-export const getUserAppointmentsByStatus = asyncHandler(async (req, res) => {
-  const {status} = req.query;
-  if (!status || !['completed', 'pending'].includes(status)) {
-    throw new ApiError(
-      400,
-      "status query parameter must be either 'completed' or 'pending'"
-    );
-  }
-
-  const query = {
-    userId: req.user._id,
-    checkInOutStatus: status,
-  };
-
-  const appointments = await UserToken.find(query)
-    .populate({
-      path: 'timeSlotId',
-      select: 'date timeSlots',
-      populate: {
-        path: 'timeSlots',
-        match: {slotNumber: {$exists: true}},
-      },
-    })
-    .sort({date: -1})
-    .select(
-      'slotNumber tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime checkedOutTime'
-    );
-
-  console.log(appointments);
-
-  const transformedAppointments = appointments.map((apt) => {
-    const timeSlot = apt.timeSlotId.timeSlots.find(
-      (ts) => ts.slotNumber === apt.slotNumber
-    );
-    return {
-      _id: apt._id,
-      tokenNumber: apt.tokenNumber,
-      timeSlot: `${timeSlot?.startingTime} - ${timeSlot?.endingTime}`,
-      checkedOutTime: apt.checkedOutTime,
-      date: apt.date,
-      estimatedTurnTime: apt.estimatedTurnTime,
-      checkInOutStatus: apt.checkInOutStatus,
-      tokenGenerationTime: apt.tokenGenerationTime,
-    };
-  });
-
-  res.status(200).json(
-    new ApiResponse(
-      200,
-      {
-        total: transformedAppointments.length,
-        appointments: transformedAppointments,
-      },
-      `User ${status} appointments retrieved successfully`
-    )
-  );
-});
+//   res.status(200).json(
+//     new ApiResponse(
+//       200,
+//       {
+//         total: transformedAppointments.length,
+//         appointments: transformedAppointments,
+//       },
+//       `User ${status} appointments retrieved successfully`
+//     )
+//   );
+// });

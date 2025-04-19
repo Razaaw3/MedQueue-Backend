@@ -7,6 +7,7 @@ import adminRoutes from "./src/routes/admin.routes.js";
 import userRoutes from "./src/routes/user.routes.js";
 import tokenRoutes from "./src/routes/tokens.routes.js";
 import clinicRoutes from "./src/routes/clinic.routes.js";
+import privacyRoutes from "./src/routes/privacy.routes.js";
 import { Server } from "socket.io";
 import http from "http";
 import cors from "cors";
@@ -48,6 +49,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/token", tokenRoutes);
+app.use("/api/privacy", privacyRoutes);
 
 const PORT = process.env.PORT || 8000;
 

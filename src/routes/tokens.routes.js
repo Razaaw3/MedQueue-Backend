@@ -1,29 +1,28 @@
-import express from 'express';
-import {
-  verifyToken,
-  isAdmin,
-  isRegisteredUser,
-} from '../middleware/auth.middleware.js';
+import express from "express";
+import { verifyToken, isAdmin } from "../middleware/auth.middleware.js";
 import {
   generateToken,
   cancelToken,
   getQueueStatus,
   updateTokenStatus,
   getTokenHistory,
-  getTokensByDate,
-  getActiveToken,
-} from '../controllers/token.controller.js';
+  getTokensByStatus,
+  getActiveTokenByDate,
+  getAllTokensByDate,
+} from "../controllers/token.controller.js";
 
 const router = express.Router();
 
-router.post('/generate', verifyToken, generateToken);
-router.put('/:tokenId', verifyToken, cancelToken);
-router.get('/today-tokens', verifyToken, getQueueStatus);
-router.get('/token-history', verifyToken, getTokenHistory); /*  */
-router.post('/active-token', getActiveToken); /*  */
+// User routes
+router.post("/generate", verifyToken, generateToken);
+router.put("/cancel/:tokenId", verifyToken, cancelToken);
+router.get("/queue-status", verifyToken, getQueueStatus);
+router.get("/history", verifyToken, getTokenHistory);
+router.get("/tokens-by-status", verifyToken, getTokensByStatus);
+router.post("/active", verifyToken, getActiveTokenByDate);
 
-// admin routes
-router.patch('/:tokenId/status', verifyToken, isAdmin, updateTokenStatus);
-router.get('/by-date', verifyToken, isRegisteredUser, getTokensByDate);
+// Admin routes
+router.patch("/:tokenId/status", verifyToken, isAdmin, updateTokenStatus);
+router.get("/tokens-by-date", verifyToken, isAdmin, getAllTokensByDate);
 
 export default router;
