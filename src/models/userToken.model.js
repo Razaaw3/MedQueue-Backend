@@ -39,7 +39,7 @@ const userTokenSchema = new mongoose.Schema(
       default: true,
     },
     checkedOutTime: {
-      type: String,
+      type: Date,
     },
     isExpired: {
       type: Boolean,
