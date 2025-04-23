@@ -489,6 +489,37 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 
       queue.lastTokenId = token._id;
       break;
+
+    case "cancelled":
+      token.isActive = false;
+      token.checkInOutStatus = checkInOutStatus;
+      token.cancellationDetails = {
+        cancelledBy: req.user.role,
+        cancelledById: req.user._id,
+        cancelledAt: addHours(new Date(), 5),
+      };
+
+      // Remove token from queue's upcoming tokens
+      queue.upcomingTokenIds = queue.upcomingTokenIds.filter(
+        (id) => id.toString() !== tokenId.toString()
+      );
+
+      // If this was the active token, clear it
+      if (queue.activeTokenId?.toString() === tokenId.toString()) {
+        queue.activeTokenId = null;
+      }
+
+      io.emit("tokenUpdate", {
+        data: {
+          offset: queue.offset,
+          waitTime: queue.waitTime,
+          exceptional: queue.exceptional,
+        },
+        message: "Token cancelled successfully",
+        success: true,
+      });
+      break;
+
     default:
       throw new ApiError(400, "Bad status for token");
   }
