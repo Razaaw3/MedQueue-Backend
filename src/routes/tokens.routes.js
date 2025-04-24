@@ -1,5 +1,10 @@
 import express from "express";
-import { verifyToken, isAdmin } from "../middleware/auth.middleware.js";
+import {
+  verifyToken,
+  isAdmin,
+  isDoctor,
+  isRegisteredUser,
+} from "../middleware/auth.middleware.js";
 import {
   generateToken,
   generateTokenByAdmin,
@@ -30,10 +35,13 @@ router.get("/tokens-by-status", verifyToken, getTokensByStatus);
 router.post("/active", verifyToken, getActiveTokenByDate);
 
 // Admin routes
-router.patch("/:tokenId/status", verifyToken, isAdmin, updateTokenStatus);
+
 router.get("/tokens-by-date", verifyToken, isAdmin, getAllTokensByDate);
 router.get("/user-token", verifyToken, getUserToken);
 router.get("/my-token-detail", verifyToken, myTokenDetail);
+
+// all roles can access
+router.patch("/:tokenId/status", verifyToken, updateTokenStatus);
 
 // routes for active tokens table
 router.get("/active-table", verifyToken, isAdmin, getActiveTokensTable);
