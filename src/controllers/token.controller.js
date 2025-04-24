@@ -1,5 +1,6 @@
 import Queue from "../models/queue.model.js";
 import UserToken from "../models/userToken.model.js";
+import User from "../models/user.model.js";
 import ApiError from "../utils/errors/ApiError.js";
 import { ApiResponse } from "../utils/errors/ApiResponse.js";
 import { asyncHandler } from "../utils/errors/asyncHandler.js";
@@ -25,6 +26,7 @@ import {
   setHours,
   getHours,
   getMinutes,
+  endOfDay,
 } from "date-fns";
 import PrivacySettings from "../models/PrivacySettings.model.js";
 
@@ -957,4 +959,219 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(new ApiResponse(200, requiredToken, "Token generated successfully"));
+});
+
+// @@ Get active tokens for table with pagination and filters
+export const getActiveTokensTable = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 7,
+      search = "",
+      status,
+      date,
+      sortField = "tokenGenerationTime",
+      sortOrder = "desc",
+    } = req.query;
+    const skip = (page - 1) * limit;
+
+    let targetDate;
+    if (date) {
+      targetDate = new Date(date);
+    } else {
+      targetDate = new Date();
+    }
+
+    const dayStart = addHours(startOfDay(targetDate), 5);
+    const dayEnd = addHours(endOfDay(targetDate), 5);
+
+    const query = {
+      date: {
+        $gte: dayStart,
+        $lt: dayEnd,
+      },
+      checkInOutStatus: { $in: ["pending", "onsite"] },
+    };
+
+    if (status && ["pending", "onsite"].includes(status)) {
+      query.checkInOutStatus = status;
+    }
+
+    if (search) {
+      const users = await User.find({
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      if (users.length > 0) {
+        query.userId = { $in: users.map((user) => user._id) };
+      } else {
+        return res.status(200).json({
+          success: true,
+          tokens: [],
+          total: 0,
+          page: parseInt(page),
+          totalPages: 0,
+        });
+      }
+    }
+
+    let sortConfig = {};
+    if (sortField === "tokenNumber") {
+      sortConfig = { tokenNumber: sortOrder === "asc" ? 1 : -1 };
+    } else if (sortField === "tokenGenerationTime") {
+      sortConfig = { tokenGenerationTime: sortOrder === "asc" ? 1 : -1 };
+    } else if (sortField === "estimatedTurnTime") {
+      sortConfig = { estimatedTurnTime: sortOrder === "asc" ? 1 : -1 };
+    } else if (sortField === "date") {
+      sortConfig = { date: sortOrder === "asc" ? 1 : -1 };
+    } else if (sortField === "status") {
+      sortConfig = { checkInOutStatus: sortOrder === "asc" ? 1 : -1 };
+    } else {
+      sortConfig = { tokenGenerationTime: -1 };
+    }
+
+    const tokens = await UserToken.find(query)
+      .populate({
+        path: "userId",
+        select: "name email",
+        match: { _id: { $exists: true } },
+      })
+      .sort(sortConfig)
+      .skip(skip)
+      .limit(limit);
+
+    const total = await UserToken.countDocuments(query);
+
+    const formattedTokens = tokens
+      .filter((token) => token.userId !== null)
+      .map((token) => ({
+        id: token._id,
+        tokenNumber: token.tokenNumber,
+        full_name: token.userId?.name || "Unknown User",
+        email: token.userId?.email || "No Email",
+        status: token.checkInOutStatus,
+        tokenGenerationTime: token.tokenGenerationTime,
+        estimatedTurnTime: token.estimatedTurnTime,
+        estimatedEndTime: token.estimatedEndTime,
+        tokenActivationTime: token.tokenActivationTime,
+        date: token.date,
+      }));
+
+    res.status(200).json({
+      success: true,
+      tokens: formattedTokens,
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    console.error("Error in getActiveTokensTable:", error);
+    res
+      .status(500)
+      .json(
+        new ApiResponse(
+          500,
+          null,
+          error.message || "Error fetching active tokens"
+        )
+      );
+  }
+};
+
+// @@ Update token status from table
+export const updateTokenStatusTable = async (req, res) => {
+  try {
+    const { tokenId } = req.params;
+    const { status } = req.body;
+
+    console.log("Received update request:", { tokenId, status });
+
+    if (!status || !["pending", "onsite"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Invalid status provided. Only "pending" and "onsite" are allowed.',
+      });
+    }
+
+    const token = await UserToken.findById(tokenId);
+    console.log("Found token:", token);
+
+    if (!token) {
+      return res.status(404).json({
+        success: false,
+        message: "Token not found",
+      });
+    }
+
+    token.checkInOutStatus = status;
+
+    if (status === "onsite") {
+      token.tokenActivationTime = new Date();
+    }
+
+    await token.save();
+    console.log("Token updated successfully");
+
+    res.status(200).json({
+      success: true,
+      message: "Token status updated successfully",
+      token: {
+        id: token._id,
+        status: token.checkInOutStatus,
+        tokenActivationTime: token.tokenActivationTime,
+      },
+    });
+  } catch (error) {
+    console.error("Error in updateTokenStatusTable:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error updating token status",
+      error: error.message,
+    });
+  }
+};
+
+// @@ Delete token
+export const deleteToken = asyncHandler(async (req, res) => {
+  const { tokenId } = req.params;
+
+  const token = await UserToken.findById(tokenId);
+  if (!token) {
+    throw new ApiError(404, "Token not found");
+  }
+
+  const queue = await Queue.findOne({
+    $or: [{ activeTokenId: tokenId }, { upcomingTokenIds: tokenId }],
+  });
+
+  if (queue) {
+    queue.upcomingTokenIds = queue.upcomingTokenIds.filter(
+      (id) => id.toString() !== tokenId.toString()
+    );
+
+    if (queue.activeTokenId?.toString() === tokenId.toString()) {
+      queue.activeTokenId = null;
+    }
+
+    if (queue.lastTokenId?.toString() === tokenId.toString()) {
+      queue.lastTokenId = null;
+    }
+
+    await queue.save();
+  }
+
+  await UserToken.findByIdAndDelete(tokenId);
+
+  io.emit("tokenDeleted", {
+    tokenId,
+    message: "Token deleted successfully",
+  });
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, null, "Token deleted successfully"));
 });
