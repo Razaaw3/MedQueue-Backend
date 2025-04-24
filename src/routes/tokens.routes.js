@@ -2,6 +2,7 @@ import express from "express";
 import { verifyToken, isAdmin } from "../middleware/auth.middleware.js";
 import {
   generateToken,
+  generateTokenByAdmin,
   cancelToken,
   getQueueStatus,
   updateTokenStatus,
@@ -14,12 +15,14 @@ import {
   getActiveTokensTable,
   updateTokenStatusTable,
   deleteToken,
+  getTodayPatients,
 } from "../controllers/token.controller.js";
 
 const router = express.Router();
 
 // User routes
 router.post("/generate", verifyToken, generateToken);
+router.post("/generate-by-admin", verifyToken, isAdmin, generateTokenByAdmin);
 router.put("/cancel/:tokenId", verifyToken, cancelToken);
 router.get("/queue-status", verifyToken, getQueueStatus);
 router.get("/history", verifyToken, getTokenHistory);
@@ -34,6 +37,7 @@ router.get("/my-token-detail", verifyToken, myTokenDetail);
 
 // routes for active tokens table
 router.get("/active-table", verifyToken, isAdmin, getActiveTokensTable);
+router.get("/today-patients", verifyToken, isAdmin, getTodayPatients);
 router.patch(
   "/:tokenId/status-table",
   verifyToken,

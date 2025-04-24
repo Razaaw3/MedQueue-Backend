@@ -211,12 +211,122 @@ export const generateToken = asyncHandler(async (req, res) => {
     .json(new ApiResponse(201, userToken, "Token generated successfully"));
 });
 
+// @@ Generate token by admin
+export const generateTokenByAdmin = asyncHandler(async (req, res) => {
+  const { date, fullName, email } = req.body;
+  const socket = req.io;
+
+  if (!date || !fullName || !email) {
+    throw new ApiError(400, "Missing required fields: date, fullName, email");
+  }
+
+  const clinic = await Clinic.findOne();
+  if (!clinic) {
+    throw new ApiError(
+      404,
+      "Clinic settings not found. Please visit the clinic"
+    );
+  }
+
+  let tempUser = await User.findOne({ email, isTemporary: true });
+
+  if (!tempUser) {
+    tempUser = await User.create({
+      name: fullName,
+      email,
+      isTemporary: true,
+      role: "registeredUser",
+      password: Math.random().toString(36).slice(-8),
+    });
+  }
+
+  const requestedDate = formatISO(
+    addHours(new TZDate(date, "Asia/Karachi"), 5).setHours(0, 0, 0, 0),
+    {
+      representation: "complete",
+    }
+  );
+  let today = TZDate.tz("Asia/Karachi").toISOString();
+
+  let queue = await Queue.findOne({
+    date: addHours(parseISO(requestedDate), 5),
+  });
+
+  if (!queue) {
+    queue = new Queue({
+      date: addHours(parseISO(requestedDate), 5),
+      activeTokenId: null,
+      upcomingTokenIds: [],
+    });
+  }
+
+  let estimatedTurnTime;
+  if (queue.upcomingTokenIds.length > 0) {
+    const lastTokenId =
+      queue.upcomingTokenIds[queue.upcomingTokenIds.length - 1];
+    const lastToken = await UserToken.findById(lastTokenId);
+    estimatedTurnTime = addMinutes(
+      lastToken.estimatedTurnTime,
+      10
+    ).toISOString();
+  } else {
+    estimatedTurnTime = openingTime.toISOString();
+    const now = addHours(new Date(), 5);
+    estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
+
+    if (isAfter(now, addHours(parseISO(formatISO(openingTime)), 5))) {
+      if (!queue || queue.upcomingTokenIds.length === 0) {
+        queue.waitTime = differenceInMinutes(
+          now,
+          addHours(parseISO(formatISO(openingTime)), 5)
+        );
+      }
+    }
+  }
+
+  const lastTokenOfDay = await UserToken.findOne({
+    date: addHours(parseISO(requestedDate), 5),
+  });
+  const tokenNumber = lastTokenOfDay ? queue.upcomingTokenIds.length + 1 : 1;
+
+  const userToken = new UserToken({
+    userId: tempUser._id, // Use the temporary user's ID
+    tokenNumber,
+    estimatedTurnTime: estimatedTurnTime,
+    date: addHours(parseISO(requestedDate), 5),
+    checkInOutStatus: "pending",
+    isActive: false,
+    tokenGenerationTime: addHours(parseISO(today), 5),
+    estimatedEndTime: addMinutes(estimatedTurnTime, 10),
+    fullName,
+    email,
+    isAdminGenerated: true,
+    isWalkIn: true,
+  });
+
+  io.emit("tokenUpdate", {
+    data: {
+      waitTime: queue.waitTime,
+    },
+  });
+
+  await userToken.save();
+
+  queue.upcomingTokenIds.push(userToken._id);
+  await queue.save();
+
+  res
+    .status(201)
+    .json(
+      new ApiResponse(201, userToken, "Token generated successfully by admin")
+    );
+});
+
 // @@ Cancel token
 export const cancelToken = asyncHandler(async (req, res) => {
   const { tokenId } = req.params;
   const { role, _id: userId } = req.user;
 
-  // Find the token to be cancelled
   const token = await UserToken.findOne({
     _id: tokenId,
     isActive: true,
@@ -325,8 +435,6 @@ export const getQueueStatus = asyncHandler(async (req, res) => {
   })
     .populate("upcomingTokenIds")
     .lean();
-
-  // console.log(allTokens);
 
   res.json(
     new ApiResponse(
@@ -1174,4 +1282,121 @@ export const deleteToken = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(new ApiResponse(200, null, "Token deleted successfully"));
+});
+
+// @@ Get today's patients
+export const getTodayPatients = asyncHandler(async (req, res) => {
+  const {
+    page = 1,
+    limit = 10,
+    search = "",
+    sortField = "tokenGenerationTime",
+    sortOrder = "desc",
+  } = req.query;
+
+  try {
+    const today = new Date();
+    const startOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    );
+    const endOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() + 1
+    );
+
+    const startTime = addHours(startOfToday, 5);
+    const endTime = addHours(endOfToday, 5);
+
+    console.log("Date Range:", {
+      startTime,
+      endTime,
+      currentServerTime: new Date(),
+    });
+
+    let userQuery = {};
+    if (search) {
+      const users = await User.find({
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      if (users.length > 0) {
+        userQuery = { userId: { $in: users.map((user) => user._id) } };
+      }
+    }
+
+    const query = {
+      date: {
+        $gte: startTime,
+        $lt: endTime,
+      },
+      ...(search && userQuery),
+    };
+
+    console.log("Query:", JSON.stringify(query, null, 2));
+
+    const total = await UserToken.countDocuments(query);
+    console.log("Total tokens for today:", total);
+
+    const tokens = await UserToken.find(query)
+      .populate({
+        path: "userId",
+        select: "name email",
+      })
+      .sort({ [sortField]: sortOrder === "asc" ? 1 : -1 })
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit))
+      .lean();
+
+    console.log("Found tokens for today:", tokens.length);
+
+    const formattedTokens = tokens
+      .filter((token) => token.userId)
+      .map((token) => ({
+        id: token._id,
+        tokenNumber: token.tokenNumber,
+        full_name: token.userId?.name || "Unknown User",
+        email: token.userId?.email || "No Email",
+        estimatedTurnTime: token.estimatedTurnTime,
+        tokenGenerationTime: token.tokenGenerationTime,
+        date: token.date,
+        status: token.checkInOutStatus,
+      }));
+
+    const statusCounts = {
+      pending: await UserToken.countDocuments({
+        ...query,
+        checkInOutStatus: "pending",
+      }),
+      onsite: await UserToken.countDocuments({
+        ...query,
+        checkInOutStatus: "onsite",
+      }),
+      completed: await UserToken.countDocuments({
+        ...query,
+        checkInOutStatus: "completed",
+      }),
+      cancelled: await UserToken.countDocuments({
+        ...query,
+        checkInOutStatus: "cancelled",
+      }),
+    };
+
+    res.status(200).json({
+      success: true,
+      tokens: formattedTokens,
+      total,
+      statusCounts,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / parseInt(limit)),
+    });
+  } catch (error) {
+    console.error("Error in getTodayPatients:", error);
+    throw new ApiError(500, error.message || "Error fetching today's patients");
+  }
 });
