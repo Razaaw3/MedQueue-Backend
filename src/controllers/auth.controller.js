@@ -184,7 +184,6 @@ const resendOTP = asyncHandler(async (req, res) => {
 // Login
 const login = asyncHandler(async (req, res) => {
   const {email, password} = req.body;
-  console.log('first');
 
   if (!email || !password) {
     throw new ApiError(400, 'Email and password are required');
@@ -194,7 +193,7 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Invalid email format');
   }
 
-  const user = await User.findOne({email});
+  const user = await User.findOne({email}).select('+password'); // Make sure password is selected
 
   if (!user) {
     throw new ApiError(401, 'Invalid credentials');
@@ -208,7 +207,13 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(429, 'Too many failed login attempts. Try again later.');
   }
 
-  const isPasswordValid = await bcrypt.compare(password, user.password);
+  // Debugging: Log stored hash and input password
+  console.log('Stored hash:', user.password);
+  console.log('Input password:', password);
+
+  const isPasswordValid = await bcrypt.compare(password.trim(), user.password);
+  console.log('Password valid:', isPasswordValid);
+
   if (!isPasswordValid) {
     user.failedLoginAttempts += 1;
     await user.save();

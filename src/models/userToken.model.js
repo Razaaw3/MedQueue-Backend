@@ -1,5 +1,5 @@
-import moment from 'moment-timezone';
-import mongoose from 'mongoose';
+import moment from "moment-timezone";
+import mongoose from "mongoose";
 
 const userTokenSchema = new mongoose.Schema(
   {
@@ -9,7 +9,7 @@ const userTokenSchema = new mongoose.Schema(
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
     },
     tokenGenerationTime: {
@@ -18,8 +18,8 @@ const userTokenSchema = new mongoose.Schema(
     },
     checkInOutStatus: {
       type: String,
-      enum: ['pending', 'onsite', 'completed', 'cancelled'],
-      default: 'pending',
+      enum: ["pending", "onsite", "completed", "cancelled"],
+      default: "pending",
     },
     estimatedTurnTime: {
       type: Date,
@@ -45,6 +45,23 @@ const userTokenSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isWalkIn: {
+      type: Boolean,
+      default: false,
+    },
+    cancellationDetails: {
+      cancelledBy: {
+        type: String,
+        enum: ["user", "admin"],
+      },
+      cancelledById: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      cancelledAt: {
+        type: Date,
+      },
+    },
   },
   {
     timestamps: true,
@@ -66,5 +83,5 @@ const userTokenSchema = new mongoose.Schema(
 //   );
 // });
 
-const UserToken = mongoose.model('UserToken', userTokenSchema);
+const UserToken = mongoose.model("UserToken", userTokenSchema);
 export default UserToken;

@@ -8,6 +8,7 @@ import userRoutes from "./src/routes/user.routes.js";
 import tokenRoutes from "./src/routes/tokens.routes.js";
 import clinicRoutes from "./src/routes/clinic.routes.js";
 import privacyRoutes from "./src/routes/privacy.routes.js";
+import dashboardRoutes from "./src/routes/dashboard.routes.js";
 import { Server } from "socket.io";
 import http from "http";
 import cors from "cors";
@@ -34,7 +35,7 @@ app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:3000",
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
@@ -50,6 +51,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/token", tokenRoutes);
 app.use("/api/privacy", privacyRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 const PORT = process.env.PORT || 8000;
 

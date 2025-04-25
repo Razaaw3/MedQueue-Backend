@@ -1,30 +1,35 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
+      required: [true, 'Name is required'],
       trim: true,
+      index: true,
     },
     role: {
       type: String,
-      enum: ["admin", "registeredUser", "doctor"],
-      default: "registeredUser",
+      enum: ['admin', 'registeredUser', 'doctor'],
+      default: 'registeredUser',
       required: true,
     },
     email: {
       type: String,
+      required: [true, 'Email is required'],
       unique: true,
-      required: true,
+      trim: true,
+      lowercase: true,
     },
     password: {
       type: String,
-      required: true,
+      required: [true, 'Password is required'],
     },
     profile: {
       type: String, // cloudinary url
       default:
-        "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png",
+        'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png',
     },
     dob: {
       type: String,
@@ -42,6 +47,13 @@ const userSchema = new mongoose.Schema(
     otpExpiry: {
       type: Date,
     },
+    isTemporary: {
+      type: Boolean,
+      default: false,
+    },
+    phoneNumber: {
+      type: String,
+    },
   },
 
   {
@@ -49,6 +61,17 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-const User = mongoose.model("User", userSchema);
+// userSchema.pre('save', async function (next) {
+//   if (!this.isModified('password')) return next();
+
+//   this.password = await bcrypt.hash(this.password, 12);
+//   next();
+// });
+
+// userSchema.methods.isPasswordCorrect = async function (password) {
+//   return await bcrypt.compare(password, this.password);
+// };
+
+const User = mongoose.model('User', userSchema);
 
 export default User;

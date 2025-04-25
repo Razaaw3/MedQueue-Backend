@@ -60,14 +60,14 @@ export const isRegisteredUser = async (req, res, next) => {
   }
 };
 
-export const isGuest = async (req, res, next) => {
+export const isDoctor = async (req, res, next) => {
   try {
-    if (req.user.role !== "guest") {
-      return res.status(403).json({ error: "Guest access required" });
+    if (req.user.role !== "doctor") {
+      return res.status(403).json({ error: "Doctor access required" });
     }
     next();
   } catch (error) {
-    console.log("Error in isGuest middleware:", error);
+    console.log("Error in isDoctor middleware:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
