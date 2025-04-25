@@ -480,7 +480,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 
         queue.offset = offset;
 
-        // await nextToken.save();
+        await nextToken.save();
       } else {
         queue.activeTokenId = null;
       }
@@ -490,8 +490,8 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
     default:
       throw new ApiError(400, 'Bad status for token');
   }
-  // await queue.save();
-  // await token.save();
+  await queue.save();
+  await token.save();
 
   res.json(new ApiResponse(200, token, 'Token status updated successfully'));
 });
