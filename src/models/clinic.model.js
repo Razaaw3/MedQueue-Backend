@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
 const clinicSchema = new mongoose.Schema(
   {
@@ -24,6 +24,10 @@ const clinicSchema = new mongoose.Schema(
       max: 1000,
       default: 150,
     },
+    tokenGenerationStatus: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
@@ -31,7 +35,7 @@ const clinicSchema = new mongoose.Schema(
 );
 
 // Ensure only one clinic settings document exists
-clinicSchema.index({}, { unique: true });
+clinicSchema.index({}, {unique: true});
 
-const Clinic = mongoose.model("Clinic", clinicSchema);
+const Clinic = mongoose.model('Clinic', clinicSchema);
 export default Clinic;

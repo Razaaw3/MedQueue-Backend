@@ -51,6 +51,14 @@ export const generateToken = asyncHandler(async (req, res) => {
     );
   }
 
+  // const settings = await PrivacySettings.findOne({}).lean();
+
+  if (!clinic.tokenGenerationStatus)
+    throw new ApiError(
+      400,
+      'Cannot generate new token since doctor is unavailable at this moment.'
+    );
+
   // Convert provided date and today to start of the day (without time)
   const requestedDate = formatISO(
     addHours(new TZDate(date, 'Asia/Karachi'), 5).setHours(0, 0, 0, 0),
@@ -138,7 +146,7 @@ export const generateToken = asyncHandler(async (req, res) => {
   // Find the queue for today
   let queue = await Queue.findOne({
     date: addHours(parseISO(requestedDate), 5),
-  });
+  }).populate('upcomingTokenIds');
 
   if (!queue) {
     queue = new Queue({
@@ -151,15 +159,40 @@ export const generateToken = asyncHandler(async (req, res) => {
   // Determine estimated turn time
   let estimatedTurnTime;
   if (queue.upcomingTokenIds.length > 0) {
-    const lastTokenId =
-      queue.upcomingTokenIds[queue.upcomingTokenIds.length - 1];
-    const lastToken = await UserToken.findById(lastTokenId);
+    const lastTokenId = queue.upcomingTokenIds
+      .filter((item) => item.isEmergency === false)
+      .pop();
 
-    estimatedTurnTime = addMinutes(
-      lastToken.estimatedTurnTime,
-      10
-    ).toISOString();
+    if (lastTokenId) {
+      const lastToken = await UserToken.findById(lastTokenId._id);
+
+      estimatedTurnTime = addMinutes(
+        lastToken.estimatedTurnTime,
+        10
+      ).toISOString();
+    } else {
+      const activeToken = await UserToken.findOne({
+        isActive: true,
+        isEmergency: true,
+      }).lean();
+
+      if (activeToken && activeToken.tokenNumber === 1) {
+        estimatedTurnTime = activeToken.tokenActivationTime;
+      } else {
+        estimatedTurnTime = openingTime.toISOString();
+        const now = addHours(new Date(), 5);
+        estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
+
+        if (isAfter(now, addHours(parseISO(formatISO(openingTime)), 5))) {
+          queue.waitTime = differenceInMinutes(
+            now,
+            addHours(parseISO(formatISO(openingTime)), 5)
+          );
+        }
+      }
+    }
   } else {
+    console.log('Else part ');
     estimatedTurnTime = openingTime.toISOString();
     const now = addHours(new Date(), 5);
     estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
@@ -197,7 +230,9 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   io.emit('tokenUpdate', {
     data: {
+      offset: queue.offset,
       waitTime: queue.waitTime,
+      exceptional: queue.exceptional,
     },
   });
 
@@ -306,7 +341,9 @@ export const generateTokenByAdmin = asyncHandler(async (req, res) => {
 
   io.emit('tokenUpdate', {
     data: {
+      offset: queue.offset,
       waitTime: queue.waitTime,
+      exceptional: queue.exceptional,
     },
   });
 
@@ -482,6 +519,8 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
             currentTime,
             queue.lastTokenId.checkedOutTime
           );
+
+          console.log('WaitTime is : ', waitTime);
           queue.waitTime = waitTime + queue.waitTime;
 
           token.isActive = true;
@@ -616,8 +655,14 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
             ? queue.upcomingTokenIds[behindTrueIndex]
             : queue.upcomingTokenIds[firstTrueIndex];
 
-        const offset =
-          differenceInMinutes(currentTime, token.tokenActivationTime) - 10;
+        let offset = 0;
+
+        if (token.isEmergency) {
+          offset = differenceInMinutes(currentTime, token.tokenActivationTime);
+        } else {
+          offset =
+            differenceInMinutes(currentTime, token.tokenActivationTime) - 10;
+        }
 
         // console.log(offset, queue.offset + offset);
 
@@ -639,73 +684,64 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
         queue.offset = offset;
 
         await nextToken.save();
-      }
+      } else if (queue.exceptional.length > 0) {
+        const sortedExceptional = [...queue.exceptional].sort((a, b) => a - b);
 
-      // else if (queue.exceptional.length > 0) {
-      //   const sortedExceptional = [...queue.exceptional].sort((a, b) => a - b);
+        // Find the smallest exceptional token that is onsite
+        const nextToken = queue.upcomingTokenIds.find(
+          (item) =>
+            sortedExceptional.includes(item.tokenNumber) &&
+            item.checkInOutStatus === 'onsite'
+        );
 
-      //   // Find the smallest exceptional token that is onsite
-      //   const nextToken = queue.upcomingTokenIds.find(
-      //     (item) =>
-      //       sortedExceptional.includes(item.tokenNumber) &&
-      //       item.checkInOutStatus === 'onsite'
-      //   );
+        if (nextToken) {
+          let offset = 0;
+          if (token.isEmergency) {
+            offset = differenceInMinutes(
+              currentTime,
+              token.tokenActivationTime
+            );
+          } else {
+            offset =
+              differenceInMinutes(currentTime, token.tokenActivationTime) - 10;
+          }
 
-      //   if (nextToken) {
-      //     const currentTokenNumber = token.tokenNumber;
+          queue.activeTokenId = nextToken._id;
+          nextToken.tokenActivationTime = currentTime;
+          nextToken.isActive = true;
 
-      //     let previousUnarrivedTokens = [];
-      //     let skippedTokenNumbers = [];
+          // Remove from exceptional
+          queue.exceptional = queue.exceptional.filter(
+            (num) => num !== nextToken.tokenNumber
+          );
 
-      //     previousUnarrivedTokens = queue.upcomingTokenIds.filter(
-      //       (item) =>
-      //         item.tokenNumber < currentTokenNumber &&
-      //         item.tokenNumber !== token.tokenNumber &&
-      //         item.checkInOutStatus !== 'completed'
-      //     );
+          io.emit('tokenUpdate', {
+            data: {
+              offset: offset + queue.offset,
+              waitTime: queue.waitTime,
+              exceptional: queue.exceptional,
+              active: nextToken,
+            },
+            message: 'Exceptional token activated',
+            success: true,
+          });
 
-      //     console.log('previousUnarrivedTokens : ', previousUnarrivedTokens);
+          queue.offset = offset;
 
-      //     skippedTokenNumbers = previousUnarrivedTokens.map(
-      //       (t) => t.tokenNumber
-      //     );
-      //     // Merge into queue.exceptional (avoiding duplicates)
-      //     queue.exceptional = Array.from(
-      //       new Set([...(queue.exceptional || []), ...skippedTokenNumbers])
-      //     );
-
-      //     const offset =
-      //       differenceInMinutes(currentTime, token.tokenActivationTime) - 10;
-
-      //     queue.activeTokenId = nextToken._id;
-      //     nextToken.tokenActivationTime = currentTime;
-      //     nextToken.isActive = true;
-
-      //     // Remove from exceptional
-      //     queue.exceptional = queue.exceptional.filter(
-      //       (num) => num !== nextToken.tokenNumber
-      //     );
-
-      //     io.emit('tokenUpdate', {
-      //       data: {
-      //         offset: offset + queue.offset,
-      //         waitTime: queue.waitTime,
-      //         exceptional: queue.exceptional,
-      //         active: nextToken,
-      //       },
-      //       message: 'Exceptional token activated',
-      //       success: true,
-      //     });
-
-      //     queue.offset = offset;
-
-      //     await nextToken.save();
-      //   }
-      // }
-      else {
+          await nextToken.save();
+        }
+      } else {
         queue.activeTokenId = null;
-        const offset =
-          differenceInMinutes(currentTime, token.tokenActivationTime) - 10;
+
+        let offset = 0;
+
+        if (token.isEmergency) {
+          offset = differenceInMinutes(currentTime, token.tokenActivationTime);
+        } else {
+          offset =
+            differenceInMinutes(currentTime, token.tokenActivationTime) - 10;
+        }
+
         queue.offset = offset + queue.offset;
         io.emit('tokenUpdate', {
           data: {
@@ -1525,8 +1561,9 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
 
 // @@ Get generateEmergencyToken's patients
 export const generateEmergencyToken = asyncHandler(async (req, res) => {
-  const {date, name, phoneNumber} = req.body;
-  const userId = req.user._id;
+  const {date} = req.body;
+  const userId = req.userId;
+  const currentTime = addHours(new Date(), 5);
 
   if (!date) {
     throw new ApiError(400, 'Missing required field: date');
@@ -1627,71 +1664,128 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   // Find the queue for today
   let queue = await Queue.findOne({
     date: addHours(parseISO(requestedDate), 5),
-  });
-
-  if (!queue) {
-    queue = new Queue({
-      date: addHours(parseISO(requestedDate), 5),
-      activeTokenId: null,
-      upcomingTokenIds: [],
-    });
-  }
+  }).populate('activeTokenId lastTokenId');
 
   // Determine estimated turn time
   let estimatedTurnTime;
-  if (queue.upcomingTokenIds.length > 0) {
+  if (queue && queue.upcomingTokenIds.length > 0) {
     const lastTokenId =
       queue.upcomingTokenIds[queue.upcomingTokenIds.length - 1];
     const lastToken = await UserToken.findById(lastTokenId);
+
+    console.log('lastToken : ', lastToken);
 
     estimatedTurnTime = addMinutes(
       lastToken.estimatedTurnTime,
       10
     ).toISOString();
-  } else {
-    estimatedTurnTime = openingTime.toISOString();
-    const now = addHours(new Date(), 5);
-    estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
-
-    console.log(
-      isAfter(now, addHours(parseISO(formatISO(openingTime)), 5)) && !queue
-    );
-    if (isAfter(now, addHours(parseISO(formatISO(openingTime)), 5))) {
-      if (!queue || queue.upcomingTokenIds.length === 0)
-        queue.waitTime = differenceInMinutes(
-          now,
-          addHours(parseISO(formatISO(openingTime)), 5)
-        );
-    }
   }
+  // else {
+  //   estimatedTurnTime = openingTime.toISOString();
+  //   const now = addHours(new Date(), 5);
+  //   estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
+
+  //   console.log(
+  //     isAfter(now, addHours(parseISO(formatISO(openingTime)), 5)) && !queue
+  //   );
+  //   if (isAfter(now, addHours(parseISO(formatISO(openingTime)), 5))) {
+  //     if (!queue || queue.upcomingTokenIds.length === 0)
+  //       queue.waitTime = differenceInMinutes(
+  //         now,
+  //         addHours(parseISO(formatISO(openingTime)), 5)
+  //       );
+  //   }
+  // }
 
   // Get last token number for the day
+
   const lastTokenOfDay = await UserToken.findOne({
     date: addHours(parseISO(requestedDate), 5),
   });
   const tokenNumber = lastTokenOfDay ? queue.upcomingTokenIds.length + 1 : 1;
 
-  console.log('estimatedTurnTime :', estimatedTurnTime);
   // Create new token
-  const userToken = new UserToken({
-    userId,
-    tokenNumber,
-    estimatedTurnTime: estimatedTurnTime,
-    date: addHours(parseISO(requestedDate), 5),
-    checkInOutStatus: 'pending',
-    isActive: false,
-    tokenGenerationTime: addHours(parseISO(today), 5),
-    estimatedEndTime: addMinutes(estimatedTurnTime, 10),
-  });
+  let userToken = {};
 
-  io.emit('tokenUpdate', {
-    data: {
-      waitTime: queue.waitTime,
-    },
-  });
+  if (!queue) {
+    userToken = new UserToken({
+      userId,
+      tokenNumber,
+      estimatedTurnTime: addHours(parseISO(today), 5),
+      date: addHours(parseISO(requestedDate), 5),
+      checkInOutStatus: 'onsite',
+      isActive: true,
+      tokenGenerationTime: addHours(parseISO(today), 5),
+      estimatedEndTime: addMinutes(addHours(parseISO(today), 5), 10),
+      isEmergency: true,
+      tokenActivationTime: addHours(parseISO(today), 5),
+    });
+    queue = new Queue({
+      date: addHours(parseISO(requestedDate), 5),
+      activeTokenId: userToken._id,
+      upcomingTokenIds: [],
+    });
 
+    io.emit('tokenUpdate', {
+      data: {
+        offset: queue?.offset || 0,
+        waitTime: queue?.waitTime || 0,
+        exceptional: queue?.exceptional || [],
+        active: userToken,
+      },
+    });
+  } else {
+    if (queue.activeTokenId) {
+      userToken = new UserToken({
+        userId,
+        tokenNumber,
+        estimatedTurnTime: addHours(parseISO(today), 5),
+        date: addHours(parseISO(requestedDate), 5),
+        checkInOutStatus: 'onsite',
+        isActive: true,
+        tokenGenerationTime: addHours(parseISO(today), 5),
+        estimatedEndTime: addMinutes(addHours(parseISO(today), 5), 10),
+        isEmergency: true,
+        tokenActivationTime: addHours(parseISO(today), 5),
+      });
+      const currentlyActiveToken = await UserToken.findOne({
+        _id: queue.activeTokenId,
+      });
+      currentlyActiveToken.isActive = false;
+      currentlyActiveToken.tokenActivationTime = null;
+
+      const diff = differenceInMinutes(
+        currentTime,
+        queue.activeTokenId.tokenActivationTime
+      );
+      queue.waitTime = queue.waitTime + diff;
+      currentlyActiveToken.save();
+    } else if (!queue.activeTokenId && queue.lastTokenId) {
+      // console.log(queue.lastTokenId);
+      const diff = differenceInMinutes(
+        currentTime,
+        queue.lastTokenId.checkedOutTime
+      );
+      queue.waitTime = queue.waitTime + diff;
+      userToken = new UserToken({
+        userId,
+        tokenNumber,
+        estimatedTurnTime: estimatedTurnTime,
+        date: addHours(parseISO(requestedDate), 5),
+        checkInOutStatus: 'onsite',
+        isActive: true,
+        tokenGenerationTime: addHours(parseISO(today), 5),
+        estimatedEndTime: addMinutes(estimatedTurnTime, 10),
+        isEmergency: true,
+        tokenActivationTime: addHours(parseISO(today), 5),
+      });
+    }
+  }
+  queue.activeTokenId = userToken._id;
+  queue.isEmergency = true;
+
+  console.log(queue);
   await userToken.save();
-
   queue.upcomingTokenIds.push(userToken._id);
   await queue.save();
 
