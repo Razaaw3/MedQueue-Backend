@@ -500,125 +500,16 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
   const currentTime = addHours(new Date(), 5);
 
   switch (checkInOutStatus) {
-    case 'onsite':
-      const isValid =
-        currentTime <=
-        addMinutes(
-          addMinutes(addMinutes(token.estimatedTurnTime, 10), queue.waitTime),
-          queue.offset
-        );
-      token.checkInOutStatus = checkInOutStatus;
-      let waitTime = 0;
-      if (queue.lastTokenId) {
-        console.log('queue.lastTokenId');
-        if (!queue.activeTokenId) {
-          token.tokenActivationTime = currentTime;
-
-          console.log('!queue.activeTokenId', queue.exceptional);
-          waitTime = differenceInMinutes(
-            currentTime,
-            queue.lastTokenId.checkedOutTime
-          );
-
-          console.log('WaitTime is : ', waitTime);
-          queue.waitTime = waitTime + queue.waitTime;
-
-          token.isActive = true;
-          token.tokenActivationTime = currentTime;
-          queue.activeTokenId = token._id;
-
-          io.emit('tokenUpdate', {
-            data: {
-              offset: queue.offset,
-              waitTime: queue.waitTime,
-              exceptional: queue.exceptional,
-            },
-            message: 'Est. turn time updated successfully',
-            success: true,
-          });
-        } else {
-          console.log('queue.activeTokenId');
-
-          if (!isValid) {
-            console.log('!isValid');
-            if (!queue.exceptional.includes(token.tokenNumber))
-              queue.exceptional = [
-                ...(queue.exceptional || []),
-                token.tokenNumber,
-              ];
-
-            io.emit('tokenUpdate', {
-              data: {
-                offset: queue.offset,
-                waitTime: queue.waitTime,
-                exceptional: queue.exceptional,
-              },
-              message: 'Est. turn time updated successfully',
-              success: true,
-            });
-          }
-        }
-      } else {
-        console.log('!queue.lastTokenId');
-        if (queue.activeTokenId) {
-          console.log('queue.activeTokenId');
-
-          if (!isValid) {
-            // console.log('!isValid');
-            if (!queue.exceptional.includes(token.tokenNumber))
-              queue.exceptional = [
-                ...(queue.exceptional || []),
-                token.tokenNumber,
-              ];
-
-            io.emit('tokenUpdate', {
-              data: {
-                offset: queue.offset,
-                waitTime: queue.waitTime,
-                exceptional: queue.exceptional,
-              },
-              message: 'Est. turn time updated successfully',
-              success: true,
-            });
-          }
-        } else {
-          console.log('!queue.activeTokenId');
-
-          token.tokenActivationTime = currentTime;
-
-          const clinic = await Clinic.findOne({}).lean();
-
-          const parsedDate = parse(
-            clinic.clinicOpeningTime,
-            'hh:mm a',
-            new Date()
-          );
-          queue.activeTokenId = token._id;
-          token.isActive = true;
-
-          console.log('addHours(parsedDate, 5) ');
-
-          const waitTime = differenceInMinutes(
-            currentTime,
-            addHours(parsedDate, 5)
-          );
-          queue.waitTime = waitTime;
-
-          console.log('io.emit');
-
-          io.emit('tokenUpdate', {
-            data: {
-              offset: queue.offset,
-              waitTime: waitTime,
-              exceptional: queue.exceptional,
-              active: token,
-            },
-            message: 'Est. turn time updated successfully',
-            success: true,
-          });
-        }
+    case 'pending':
+      if (token.checkInOutStatus !== 'onsite') {
+        throw new ApiError(404, 'User must be onsite before');
       }
-      break;
+      if (!token.isActive) {
+        throw new ApiError(
+          404,
+          'Token must be active before going into pending'
+        );
+      }
 
     case 'completed':
       if (token.checkInOutStatus !== 'onsite') {
@@ -756,6 +647,126 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
       }
 
       queue.lastTokenId = token._id;
+      break;
+
+    case 'onsite':
+      const isValid =
+        currentTime <=
+        addMinutes(
+          addMinutes(addMinutes(token.estimatedTurnTime, 10), queue.waitTime),
+          queue.offset
+        );
+      token.checkInOutStatus = checkInOutStatus;
+      let waitTime = 0;
+      if (queue.lastTokenId) {
+        console.log('queue.lastTokenId');
+        if (!queue.activeTokenId) {
+          token.tokenActivationTime = currentTime;
+
+          console.log('!queue.activeTokenId', queue.exceptional);
+          waitTime = differenceInMinutes(
+            currentTime,
+            queue.lastTokenId.checkedOutTime
+          );
+
+          console.log('WaitTime is : ', waitTime);
+          queue.waitTime = waitTime + queue.waitTime;
+
+          token.isActive = true;
+          token.tokenActivationTime = currentTime;
+          queue.activeTokenId = token._id;
+
+          io.emit('tokenUpdate', {
+            data: {
+              offset: queue.offset,
+              waitTime: queue.waitTime,
+              exceptional: queue.exceptional,
+            },
+            message: 'Est. turn time updated successfully',
+            success: true,
+          });
+        } else {
+          console.log('queue.activeTokenId');
+
+          if (!isValid) {
+            console.log('!isValid');
+            if (!queue.exceptional.includes(token.tokenNumber))
+              queue.exceptional = [
+                ...(queue.exceptional || []),
+                token.tokenNumber,
+              ];
+
+            io.emit('tokenUpdate', {
+              data: {
+                offset: queue.offset,
+                waitTime: queue.waitTime,
+                exceptional: queue.exceptional,
+              },
+              message: 'Est. turn time updated successfully',
+              success: true,
+            });
+          }
+        }
+      } else {
+        console.log('!queue.lastTokenId');
+        if (queue.activeTokenId) {
+          console.log('queue.activeTokenId');
+
+          if (!isValid) {
+            // console.log('!isValid');
+            if (!queue.exceptional.includes(token.tokenNumber))
+              queue.exceptional = [
+                ...(queue.exceptional || []),
+                token.tokenNumber,
+              ];
+
+            io.emit('tokenUpdate', {
+              data: {
+                offset: queue.offset,
+                waitTime: queue.waitTime,
+                exceptional: queue.exceptional,
+              },
+              message: 'Est. turn time updated successfully',
+              success: true,
+            });
+          }
+        } else {
+          console.log('!queue.activeTokenId');
+
+          token.tokenActivationTime = currentTime;
+
+          const clinic = await Clinic.findOne({}).lean();
+
+          const parsedDate = parse(
+            clinic.clinicOpeningTime,
+            'hh:mm a',
+            new Date()
+          );
+          queue.activeTokenId = token._id;
+          token.isActive = true;
+
+          console.log('addHours(parsedDate, 5) ');
+
+          const waitTime = differenceInMinutes(
+            currentTime,
+            addHours(parsedDate, 5)
+          );
+          queue.waitTime = waitTime;
+
+          console.log('io.emit');
+
+          io.emit('tokenUpdate', {
+            data: {
+              offset: queue.offset,
+              waitTime: waitTime,
+              exceptional: queue.exceptional,
+              active: token,
+            },
+            message: 'Est. turn time updated successfully',
+            success: true,
+          });
+        }
+      }
       break;
 
     case 'cancelled':
