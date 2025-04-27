@@ -1,4 +1,4 @@
-import express from "express";
+import express from 'express';
 import {
   register,
   login,
@@ -7,26 +7,31 @@ import {
   forgotPassword,
   resetPassword,
   verifyPasswordOTP,
-} from "../controllers/auth.controller.js";
-import { upload } from "../middleware/multer.middleware.js";
+  verifyEmail,
+  verifyOTPForEmailVerification,
+} from '../controllers/auth.controller.js';
+import {upload} from '../middleware/multer.middleware.js';
 
 const router = express.Router();
 
 router.post(
-  "/register",
+  '/register',
   upload.fields([
     {
-      name: "profile",
+      name: 'profile',
       maxCount: 1,
     },
   ]),
   register
 );
-router.post("/verify-email", verifyOTP);
-router.post("/resend-verification-email", resendOTP);
-router.post("/login", login);
-router.post("/forgot-password", forgotPassword);
-router.post("/reset-password", resetPassword);
-router.post("/verify-password-otp", verifyPasswordOTP);
+router.post('/verify-email', verifyOTP);
+router.post('/email-verification-request', verifyEmail);
+router.put('/confirm-email-verification', verifyOTPForEmailVerification);
+
+router.post('/resend-verification-email', resendOTP);
+router.post('/login', login);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
+router.post('/verify-password-otp', verifyPasswordOTP);
 
 export default router;

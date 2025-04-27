@@ -1,61 +1,61 @@
-import User from "../models/user.model.js";
-import ApiError from "../utils/errors/ApiError.js";
-import { ApiResponse } from "../utils/errors/ApiResponse.js";
-import { asyncHandler } from "../utils/errors/asyncHandler.js";
-import { uploadOnCloudinary } from "../utils/cloudinaryImageHandling.js";
+import User from '../models/user.model.js';
+import ApiError from '../utils/errors/ApiError.js';
+import {ApiResponse} from '../utils/errors/ApiResponse.js';
+import {asyncHandler} from '../utils/errors/asyncHandler.js';
+import {uploadOnCloudinary} from '../utils/cloudinaryImageHandling.js';
 
 export const getUserProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select("-password");
+  const user = await User.findById(req.user._id).select('-password');
 
   if (!user) {
-    throw new ApiError(404, "User not found");
+    throw new ApiError(404, 'User not found');
   }
 
   res
     .status(200)
-    .json(new ApiResponse(200, user, "User profile retrieved successfully"));
+    .json(new ApiResponse(200, user, 'User profile retrieved successfully'));
 });
 
 export const updateUserProfile = asyncHandler(async (req, res) => {
-  const { name, dob, address, email } = req.body;
+  const {name, dob, address, email, phoneNumber} = req.body;
 
   const user = await User.findByIdAndUpdate(
     req.user._id,
-    { name, dob, address, email },
-    { new: true }
-  ).select("-password");
+    {name, dob, address, email, phoneNumber},
+    {new: true}
+  ).select('-password');
 
   if (!user) {
-    throw new ApiError(404, "User not found");
+    throw new ApiError(404, 'User not found');
   }
 
   res
     .status(200)
-    .json(new ApiResponse(200, user, "User profile updated successfully"));
+    .json(new ApiResponse(200, user, 'User profile updated successfully'));
 });
 
 export const updateProfileImage = asyncHandler(async (req, res) => {
-  if (!req.file) {
-    throw new ApiError(400, "No image uploaded");
+  const file = req.files?.image?.[0];
+
+  if (!file) {
+    throw new ApiError(400, 'No image uploaded');
   }
 
-  console.log("Uploaded file:", req.file);
-
   // Upload to Cloudinary
-  const profileResponse = await uploadOnCloudinary(req.file.path);
+  const profileResponse = await uploadOnCloudinary(file.path);
 
   if (!profileResponse) {
-    throw new ApiError(500, "Failed to upload image to Cloudinary");
+    throw new ApiError(500, 'Failed to upload image to Cloudinary');
   }
 
   const user = await User.findByIdAndUpdate(
     req.user._id,
-    { profile: profileResponse.url }, // Save Cloudinary URL
-    { new: true }
-  ).select("-password");
+    {profile: profileResponse.url}, // Save Cloudinary URL
+    {new: true}
+  ).select('-password');
 
   if (!user) {
-    throw new ApiError(404, "User not found");
+    throw new ApiError(404, 'User not found');
   }
 
   res
@@ -63,8 +63,8 @@ export const updateProfileImage = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(
         200,
-        { imageUrl: profileResponse.url },
-        "User profile updated successfully"
+        {imageUrl: profileResponse.url},
+        'User profile updated successfully'
       )
     );
 });

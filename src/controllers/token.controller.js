@@ -567,6 +567,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
             waitTime: queue.waitTime,
             exceptional: queue.exceptional,
             active: nextToken,
+            isEmergency: nextToken.isEmergency,
           },
           message: 'Est. turn time updated successfully',
           success: true,
@@ -612,6 +613,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
               waitTime: queue.waitTime,
               exceptional: queue.exceptional,
               active: nextToken,
+              isEmergency: nextToken.isEmergency,
             },
             message: 'Exceptional token activated',
             success: true,
@@ -681,6 +683,8 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
               offset: queue.offset,
               waitTime: queue.waitTime,
               exceptional: queue.exceptional,
+              active: token,
+              isEmergency: token.isEmergency,
             },
             message: 'Est. turn time updated successfully',
             success: true,
@@ -761,6 +765,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
               waitTime: waitTime,
               exceptional: queue.exceptional,
               active: token,
+              isEmergency: token.isEmergency,
             },
             message: 'Est. turn time updated successfully',
             success: true,
@@ -812,12 +817,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 export const getTokenHistory = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  const tokens = await UserToken.find({userId})
-    .sort({tokenGenerationTime: -1})
-    .select(
-      'tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime estimatedEndTime isActive'
-    );
-
+  const tokens = await UserToken.find({userId}).sort({tokenGenerationTime: -1});
   if (!tokens || tokens.length === 0) {
     throw new ApiError(404, 'No tokens found for this user');
   }
@@ -855,6 +855,7 @@ export const getTokenHistory = asyncHandler(async (req, res) => {
       estimatedTurnTime: formatTime(token.estimatedTurnTime),
       tokenGenerationTime: formatDateTime(token.tokenGenerationTime),
       estimatedEndTime: formatTime(token.estimatedEndTime),
+      OriginalToken: token.toObject(),
     };
   });
 
@@ -1053,11 +1054,7 @@ export const getTokensByStatus = asyncHandler(async (req, res) => {
   const tokens = await UserToken.find({
     userId,
     checkInOutStatus: status,
-  })
-    .sort({tokenGenerationTime: -1})
-    .select(
-      'tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime estimatedEndTime isActive'
-    );
+  }).sort({tokenGenerationTime: -1});
 
   if (!tokens || tokens.length === 0) {
     throw new ApiError(404, `No ${status} tokens found for this user`);
@@ -1083,6 +1080,7 @@ export const getTokensByStatus = asyncHandler(async (req, res) => {
     estimatedTurnTime: formatTime(token.estimatedTurnTime),
     tokenGenerationTime: formatDateTime(token.tokenGenerationTime),
     estimatedEndTime: formatTime(token.estimatedEndTime),
+    OriginalToken: token.toObject(),
   }));
 
   const statusCounts = await Promise.all(
@@ -1108,10 +1106,12 @@ export const getUserToken = asyncHandler(async (req, res) => {
   const _id = req.user._id;
   const socket = req.io;
   const targetDate = new Date();
+  const settings = await PrivacySettings.findOne({}).lean();
 
   const date = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
   const userToken = await UserToken.findOne({
     userId: _id,
+    date,
   }).lean();
   const queue = await Queue.findOne({}).lean();
 
@@ -1126,6 +1126,8 @@ export const getUserToken = asyncHandler(async (req, res) => {
       waitTime: queue?.waitTime || 0,
       exceptional: queue?.exceptional || [],
       active: token,
+      isEmergency: token.isEmergency,
+      doctorAvailability: settings.doctorAvailability,
     },
     message: 'Est. turn time updated successfully',
     success: true,
@@ -1736,15 +1738,6 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
       activeTokenId: userToken._id,
       upcomingTokenIds: [],
     });
-
-    io.emit('tokenUpdate', {
-      data: {
-        offset: queue?.offset || 0,
-        waitTime: queue?.waitTime || 0,
-        exceptional: queue?.exceptional || [],
-        active: userToken,
-      },
-    });
   } else {
     if (queue.activeTokenId) {
       userToken = new UserToken({
@@ -1799,6 +1792,16 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   await userToken.save();
   queue.upcomingTokenIds.push(userToken._id);
   await queue.save();
+
+  io.emit('tokenUpdate', {
+    data: {
+      offset: queue?.offset || 0,
+      waitTime: queue?.waitTime || 0,
+      exceptional: queue?.exceptional || [],
+      active: userToken,
+      isEmergency: userToken.isEmergency,
+    },
+  });
 
   res
     .status(201)

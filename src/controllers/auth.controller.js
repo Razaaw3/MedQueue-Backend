@@ -33,9 +33,15 @@ const generateToken = (user) => {
 
 // Register User
 const register = asyncHandler(async (req, res) => {
-  const {name, email, password, role = 'registeredUser'} = req.body;
+  const {
+    name,
+    email,
+    password,
+    role = 'registeredUser',
+    phoneNumber,
+  } = req.body;
 
-  if (!name || !email || !password) {
+  if (!name || !email || !password || !phoneNumber) {
     throw new ApiError(400, 'All fields are required');
   }
 
@@ -96,6 +102,7 @@ const register = asyncHandler(async (req, res) => {
     otpExpiry,
     isVerified: false,
     failedLoginAttempts: 0,
+    phoneNumber,
   });
 
   await sendEmail(
@@ -183,17 +190,31 @@ const resendOTP = asyncHandler(async (req, res) => {
 
 // Login
 const login = asyncHandler(async (req, res) => {
-  const {email, password} = req.body;
+  const {email, password, phoneNumber} = req.body;
 
-  if (!email || !password) {
-    throw new ApiError(400, 'Email and password are required');
+  if (!email) {
+    if (!phoneNumber)
+      throw new ApiError(400, 'Email or Phone Number is required');
   }
 
-  if (!validateEmail(email)) {
+  if (!password) {
+    throw new ApiError(400, 'password are required');
+  }
+
+  console.log(email);
+  if (email && !validateEmail(email)) {
     throw new ApiError(400, 'Invalid email format');
   }
 
-  const user = await User.findOne({email}).select('+password'); // Make sure password is selected
+  let user;
+  if (phoneNumber) {
+    user = await User.findOne({phoneNumber}).select('+password');
+    if (!user.email) throw new ApiError(400, 'Verify your email');
+  } else {
+    user = await User.findOne({email}).select('+password'); // Make sure password is selected
+  }
+
+  console.log(user);
 
   if (!user) {
     throw new ApiError(401, 'Invalid credentials');
@@ -248,7 +269,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Email is required');
   }
 
-  if (!validateEmail(email)) {
+  if (email || !validateEmail(email)) {
     throw new ApiError(400, 'Invalid email format');
   }
 
@@ -343,6 +364,84 @@ const verifyPasswordOTP = asyncHandler(async (req, res) => {
     );
 });
 
+// Verify Email address
+const verifyEmail = asyncHandler(async (req, res) => {
+  const {email, phoneNumber} = req.body;
+
+  if (!email) {
+    throw new ApiError(400, 'Email is required');
+  }
+
+  // if (email || !validateEmail(email)) {
+  //   throw new ApiError(400, 'Invalid email format');
+  // }
+
+  const checkUser = await User.findOne({email}).lean();
+
+  if (checkUser)
+    throw new ApiError(
+      400,
+      'This email is already attached with other account'
+    );
+
+  const user = await User.findOne({phoneNumber});
+
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const otp = generateOTP();
+  user.otp = hashOTP(otp);
+  user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
+  await user.save();
+
+  await sendEmail(
+    email,
+    'Password Reset OTP - MedQueue',
+    'passwordReset.html',
+    {otp}
+  );
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {email}, 'Password reset OTP sent to email.'));
+});
+
+// Verify OTP
+const verifyOTPForEmailVerification = asyncHandler(async (req, res) => {
+  const {email, otp, phoneNumber} = req.body;
+
+  console.log(phoneNumber);
+
+  if (!email || !otp) {
+    throw new ApiError(400, 'Email and OTP are required');
+  }
+
+  const user = await User.findOne({phoneNumber});
+
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  if (!user.otp || user.otpExpiry < new Date()) {
+    throw new ApiError(400, 'OTP expired. Please request a new OTP.');
+  }
+
+  const isOTPValid = bcrypt.compareSync(otp, user.otp);
+  if (!isOTPValid) {
+    throw new ApiError(400, 'Invalid OTP');
+  }
+  user.email = email;
+  user.otp = undefined;
+  user.otpExpiry = undefined;
+  await user.save();
+
+  console.log(user);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {email}, 'Email verified successfully'));
+});
+
 export {
   register,
   verifyOTP,
@@ -351,4 +450,6 @@ export {
   forgotPassword,
   resetPassword,
   verifyPasswordOTP,
+  verifyEmail,
+  verifyOTPForEmailVerification,
 };
