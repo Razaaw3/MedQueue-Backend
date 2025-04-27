@@ -1,14 +1,14 @@
-import Queue from '../models/queue.model.js';
-import UserToken from '../models/userToken.model.js';
-import User from '../models/user.model.js';
-import ApiError from '../utils/errors/ApiError.js';
-import {ApiResponse} from '../utils/errors/ApiResponse.js';
-import {asyncHandler} from '../utils/errors/asyncHandler.js';
-import {io} from '../../index.js';
-import Clinic from '../models/clinic.model.js';
-import moment from 'moment';
-import {tz, TZDate} from '@date-fns/tz';
-import DoctorDetail from '../models/doctorDetail.model.js';
+import Queue from "../models/queue.model.js";
+import UserToken from "../models/userToken.model.js";
+import User from "../models/user.model.js";
+import ApiError from "../utils/errors/ApiError.js";
+import { ApiResponse } from "../utils/errors/ApiResponse.js";
+import { asyncHandler } from "../utils/errors/asyncHandler.js";
+import { io } from "../../index.js";
+import Clinic from "../models/clinic.model.js";
+import moment from "moment";
+import { tz, TZDate } from "@date-fns/tz";
+import DoctorDetail from "../models/doctorDetail.model.js";
 
 import {
   parseISO,
@@ -27,27 +27,27 @@ import {
   getHours,
   getMinutes,
   endOfDay,
-} from 'date-fns';
-import PrivacySettings from '../models/PrivacySettings.model.js';
+} from "date-fns";
+import PrivacySettings from "../models/PrivacySettings.model.js";
 
 // @@ Generate token
 export const generateToken = asyncHandler(async (req, res) => {
   // get timezone
   // const zonalArea = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  const {date} = req.body;
+  const { date } = req.body;
   const socket = req.io;
   const userId = req.user._id;
 
   if (!date) {
-    throw new ApiError(400, 'Missing required field: date');
+    throw new ApiError(400, "Missing required field: date");
   }
 
   const clinic = await Clinic.findOne();
   if (!clinic) {
     throw new ApiError(
       404,
-      'Clinic settings not found. Please visit the clinic'
+      "Clinic settings not found. Please visit the clinic"
     );
   }
 
@@ -56,17 +56,17 @@ export const generateToken = asyncHandler(async (req, res) => {
   if (!clinic.tokenGenerationStatus)
     throw new ApiError(
       400,
-      'Cannot generate new token since doctor is unavailable at this moment.'
+      "Cannot generate new token since doctor is unavailable at this moment."
     );
 
   // Convert provided date and today to start of the day (without time)
   const requestedDate = formatISO(
-    addHours(new TZDate(date, 'Asia/Karachi'), 5).setHours(0, 0, 0, 0),
+    addHours(new TZDate(date, "Asia/Karachi"), 5).setHours(0, 0, 0, 0),
     {
-      representation: 'complete',
+      representation: "complete",
     }
   );
-  let today = TZDate.tz('Asia/Karachi').toISOString();
+  let today = TZDate.tz("Asia/Karachi").toISOString();
 
   // // //Uncomment the below feature if you are done with the development
 
@@ -85,7 +85,7 @@ export const generateToken = asyncHandler(async (req, res) => {
   });
 
   if (existingToken) {
-    throw new ApiError(400, 'You already have an active token for today.');
+    throw new ApiError(400, "You already have an active token for today.");
   }
 
   // Convert clinic opening and closing times to today's full DateTime
@@ -97,7 +97,7 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   const clinicDate = parse(
     clinic.clinicOpeningTime,
-    'hh:mm a',
+    "hh:mm a",
     addHours(new Date(), 5)
   );
   const openingHours = getHours(clinicDate);
@@ -112,7 +112,7 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   const clinicClosingTime = parse(
     clinic.clinicClosingTime,
-    'hh:mm a',
+    "hh:mm a",
     addHours(new Date(), 5)
   );
   const closingHours = getHours(clinicClosingTime);
@@ -125,11 +125,11 @@ export const generateToken = asyncHandler(async (req, res) => {
     milliseconds: 0,
   });
 
-  const openingTime = new TZDate(todayWithTime, 'Asia/Karachi');
+  const openingTime = new TZDate(todayWithTime, "Asia/Karachi");
 
   const closingTime = new TZDate(
     todayWithTimeClose,
-    'Asia/Karachi'
+    "Asia/Karachi"
   ).toISOString();
 
   const tokenStartTime = addMinutes(openingTime, -15);
@@ -146,7 +146,7 @@ export const generateToken = asyncHandler(async (req, res) => {
   // Find the queue for today
   let queue = await Queue.findOne({
     date: addHours(parseISO(requestedDate), 5),
-  }).populate('upcomingTokenIds');
+  }).populate("upcomingTokenIds");
 
   if (!queue) {
     queue = new Queue({
@@ -192,7 +192,7 @@ export const generateToken = asyncHandler(async (req, res) => {
       }
     }
   } else {
-    console.log('Else part ');
+    console.log("Else part ");
     estimatedTurnTime = openingTime.toISOString();
     const now = addHours(new Date(), 5);
     estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
@@ -215,20 +215,20 @@ export const generateToken = asyncHandler(async (req, res) => {
   });
   const tokenNumber = lastTokenOfDay ? queue.upcomingTokenIds.length + 1 : 1;
 
-  console.log('estimatedTurnTime :', estimatedTurnTime);
+  console.log("estimatedTurnTime :", estimatedTurnTime);
   // Create new token
   const userToken = new UserToken({
     userId,
     tokenNumber,
     estimatedTurnTime: estimatedTurnTime,
     date: addHours(parseISO(requestedDate), 5),
-    checkInOutStatus: 'pending',
+    checkInOutStatus: "pending",
     isActive: false,
     tokenGenerationTime: addHours(parseISO(today), 5),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
   });
 
-  io.emit('tokenUpdate', {
+  io.emit("tokenUpdate", {
     data: {
       offset: queue.offset,
       waitTime: queue.waitTime,
@@ -243,45 +243,45 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   res
     .status(201)
-    .json(new ApiResponse(201, userToken, 'Token generated successfully'));
+    .json(new ApiResponse(201, userToken, "Token generated successfully"));
 });
 
 // @@ Generate token by admin
 export const generateTokenByAdmin = asyncHandler(async (req, res) => {
-  const {date, fullName, email} = req.body;
+  const { date, fullName, email } = req.body;
   const socket = req.io;
 
   if (!date || !fullName || !email) {
-    throw new ApiError(400, 'Missing required fields: date, fullName, email');
+    throw new ApiError(400, "Missing required fields: date, fullName, email");
   }
 
   const clinic = await Clinic.findOne();
   if (!clinic) {
     throw new ApiError(
       404,
-      'Clinic settings not found. Please visit the clinic'
+      "Clinic settings not found. Please visit the clinic"
     );
   }
 
-  let tempUser = await User.findOne({email, isTemporary: true});
+  let tempUser = await User.findOne({ email, isTemporary: true });
 
   if (!tempUser) {
     tempUser = await User.create({
       name: fullName,
       email,
       isTemporary: true,
-      role: 'registeredUser',
+      role: "registeredUser",
       password: Math.random().toString(36).slice(-8),
     });
   }
 
   const requestedDate = formatISO(
-    addHours(new TZDate(date, 'Asia/Karachi'), 5).setHours(0, 0, 0, 0),
+    addHours(new TZDate(date, "Asia/Karachi"), 5).setHours(0, 0, 0, 0),
     {
-      representation: 'complete',
+      representation: "complete",
     }
   );
-  let today = TZDate.tz('Asia/Karachi').toISOString();
+  let today = TZDate.tz("Asia/Karachi").toISOString();
 
   let queue = await Queue.findOne({
     date: addHours(parseISO(requestedDate), 5),
@@ -329,7 +329,7 @@ export const generateTokenByAdmin = asyncHandler(async (req, res) => {
     tokenNumber,
     estimatedTurnTime: estimatedTurnTime,
     date: addHours(parseISO(requestedDate), 5),
-    checkInOutStatus: 'pending',
+    checkInOutStatus: "pending",
     isActive: false,
     tokenGenerationTime: addHours(parseISO(today), 5),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
@@ -339,7 +339,7 @@ export const generateTokenByAdmin = asyncHandler(async (req, res) => {
     isWalkIn: true,
   });
 
-  io.emit('tokenUpdate', {
+  io.emit("tokenUpdate", {
     data: {
       offset: queue.offset,
       waitTime: queue.waitTime,
@@ -355,14 +355,14 @@ export const generateTokenByAdmin = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(
-      new ApiResponse(201, userToken, 'Token generated successfully by admin')
+      new ApiResponse(201, userToken, "Token generated successfully by admin")
     );
 });
 
 // @@ Cancel token
 export const cancelToken = asyncHandler(async (req, res) => {
-  const {tokenId} = req.params;
-  const {role, _id: userId} = req.user;
+  const { tokenId } = req.params;
+  const { role, _id: userId } = req.user;
 
   const token = await UserToken.findOne({
     _id: tokenId,
@@ -370,19 +370,19 @@ export const cancelToken = asyncHandler(async (req, res) => {
   });
 
   if (!token) {
-    throw new ApiError(404, 'Active token not found');
+    throw new ApiError(404, "Active token not found");
   }
 
-  if (role !== 'admin' && token.userId.toString() !== userId.toString()) {
+  if (role !== "admin" && token.userId.toString() !== userId.toString()) {
     throw new ApiError(403, "You don't have permission to cancel this token");
   }
 
-  if (token.checkInOutStatus !== 'pending') {
-    throw new ApiError(400, 'Cannot cancel token after check-in');
+  if (token.checkInOutStatus !== "pending") {
+    throw new ApiError(400, "Cannot cancel token after check-in");
   }
 
   const queue = await Queue.findOne({
-    $or: [{activeTokenId: tokenId}, {upcomingTokenIds: tokenId}],
+    $or: [{ activeTokenId: tokenId }, { upcomingTokenIds: tokenId }],
   });
 
   if (queue) {
@@ -398,7 +398,7 @@ export const cancelToken = asyncHandler(async (req, res) => {
   }
 
   token.isActive = false;
-  token.checkInOutStatus = 'cancelled';
+  token.checkInOutStatus = "cancelled";
   token.cancellationDetails = {
     cancelledBy: role,
     cancelledById: userId,
@@ -409,7 +409,7 @@ export const cancelToken = asyncHandler(async (req, res) => {
 
   const socket = req.io;
   if (socket) {
-    socket.emit('tokenCancelled', {
+    socket.emit("tokenCancelled", {
       tokenId,
       cancelledBy: role,
       cancelledAt: token.cancellationDetails.cancelledAt,
@@ -418,24 +418,24 @@ export const cancelToken = asyncHandler(async (req, res) => {
 
   const formatDate = (date) => {
     if (!date) return null;
-    if (date instanceof Date) return format(date, 'yyyy-MM-dd');
-    return format(parseISO(date), 'yyyy-MM-dd');
+    if (date instanceof Date) return format(date, "yyyy-MM-dd");
+    return format(parseISO(date), "yyyy-MM-dd");
   };
 
   const formatTime = (date) => {
     if (!date) return null;
-    if (date instanceof Date) return format(date, 'HH:mm');
-    return format(parseISO(date), 'HH:mm');
+    if (date instanceof Date) return format(date, "HH:mm");
+    return format(parseISO(date), "HH:mm");
   };
 
   const formatDateTime = (date) => {
     if (!date) return null;
-    if (date instanceof Date) return format(date, 'yyyy-MM-dd HH:mm');
-    return format(parseISO(date), 'yyyy-MM-dd HH:mm');
+    if (date instanceof Date) return format(date, "yyyy-MM-dd HH:mm");
+    return format(parseISO(date), "yyyy-MM-dd HH:mm");
   };
 
   const message =
-    role === 'admin' ? 'Token cancelled by admin' : 'Token cancelled by user';
+    role === "admin" ? "Token cancelled by admin" : "Token cancelled by user";
 
   res.status(200).json(
     new ApiResponse(
@@ -468,52 +468,52 @@ export const getQueueStatus = asyncHandler(async (req, res) => {
   console.log(startOfDay, endOfDay);
 
   const allTokens = await Queue.findOne({
-    date: {$gte: startOfDay, $lt: endOfDay},
+    date: { $gte: startOfDay, $lt: endOfDay },
   })
-    .populate('upcomingTokenIds')
+    .populate("upcomingTokenIds")
     .lean();
 
   res.json(
     new ApiResponse(
       200,
       allTokens?.upcomingTokenIds,
-      'Tokens retrieved successfully'
+      "Tokens retrieved successfully"
     )
   );
 });
 
 // @@ Update token status
 export const updateTokenStatus = asyncHandler(async (req, res) => {
-  const {tokenId} = req.params;
-  const {checkInOutStatus} = req.body;
+  const { tokenId } = req.params;
+  const { checkInOutStatus } = req.body;
 
   const token = await UserToken.findById(tokenId);
-  if (!token) throw new ApiError(404, 'Token not found');
+  if (!token) throw new ApiError(404, "Token not found");
 
   const doctorsQueue = await Queue.findOne({
-    upcomingTokenIds: {$in: [tokenId]},
-  }).populate('upcomingTokenIds lastTokenId');
-  if (!doctorsQueue) throw new ApiError(404, 'Queue not found');
+    upcomingTokenIds: { $in: [tokenId] },
+  }).populate("upcomingTokenIds lastTokenId");
+  if (!doctorsQueue) throw new ApiError(404, "Queue not found");
 
   let queue = doctorsQueue;
 
   const currentTime = addHours(new Date(), 5);
 
   switch (checkInOutStatus) {
-    case 'pending':
-      if (token.checkInOutStatus !== 'onsite') {
-        throw new ApiError(404, 'User must be onsite before');
+    case "pending":
+      if (token.checkInOutStatus !== "onsite") {
+        throw new ApiError(404, "User must be onsite before");
       }
       if (!token.isActive) {
         throw new ApiError(
           404,
-          'Token must be active before going into pending'
+          "Token must be active before going into pending"
         );
       }
 
-    case 'completed':
-      if (token.checkInOutStatus !== 'onsite') {
-        throw new ApiError(400, 'Token must be onsite before completion');
+    case "completed":
+      if (token.checkInOutStatus !== "onsite") {
+        throw new ApiError(400, "Token must be onsite before completion");
       }
       token.isActive = false;
       token.checkInOutStatus = checkInOutStatus;
@@ -521,14 +521,14 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 
       const firstTrueIndex = queue.upcomingTokenIds.findIndex(
         (item) =>
-          item.checkInOutStatus === 'onsite' &&
+          item.checkInOutStatus === "onsite" &&
           item.tokenNumber !== token.tokenNumber
       );
 
       const validTokens = queue.upcomingTokenIds
         .filter(
           (item) =>
-            item.checkInOutStatus === 'onsite' &&
+            item.checkInOutStatus === "onsite" &&
             item.tokenNumber !== token.tokenNumber &&
             item.tokenNumber <= token.tokenNumber
         )
@@ -561,7 +561,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
         nextToken.tokenActivationTime = currentTime;
         nextToken.isActive = true;
 
-        io.emit('tokenUpdate', {
+        io.emit("tokenUpdate", {
           data: {
             offset: offset + queue.offset,
             waitTime: queue.waitTime,
@@ -569,7 +569,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
             active: nextToken,
             isEmergency: nextToken.isEmergency,
           },
-          message: 'Est. turn time updated successfully',
+          message: "Est. turn time updated successfully",
           success: true,
         });
 
@@ -583,7 +583,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
         const nextToken = queue.upcomingTokenIds.find(
           (item) =>
             sortedExceptional.includes(item.tokenNumber) &&
-            item.checkInOutStatus === 'onsite'
+            item.checkInOutStatus === "onsite"
         );
 
         if (nextToken) {
@@ -607,7 +607,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
             (num) => num !== nextToken.tokenNumber
           );
 
-          io.emit('tokenUpdate', {
+          io.emit("tokenUpdate", {
             data: {
               offset: offset + queue.offset,
               waitTime: queue.waitTime,
@@ -615,7 +615,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
               active: nextToken,
               isEmergency: nextToken.isEmergency,
             },
-            message: 'Exceptional token activated',
+            message: "Exceptional token activated",
             success: true,
           });
 
@@ -636,14 +636,14 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
         }
 
         queue.offset = offset + queue.offset;
-        io.emit('tokenUpdate', {
+        io.emit("tokenUpdate", {
           data: {
             offset: queue.offset,
             waitTime: queue.waitTime,
             exceptional: queue.exceptional,
             active: null,
           },
-          message: 'Est. turn time updated successfully',
+          message: "Est. turn time updated successfully",
           success: true,
         });
       }
@@ -651,7 +651,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
       queue.lastTokenId = token._id;
       break;
 
-    case 'onsite':
+    case "onsite":
       const isValid =
         currentTime <=
         addMinutes(
@@ -661,24 +661,24 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
       token.checkInOutStatus = checkInOutStatus;
       let waitTime = 0;
       if (queue.lastTokenId) {
-        console.log('queue.lastTokenId');
+        console.log("queue.lastTokenId");
         if (!queue.activeTokenId) {
           token.tokenActivationTime = currentTime;
 
-          console.log('!queue.activeTokenId', queue.exceptional);
+          console.log("!queue.activeTokenId", queue.exceptional);
           waitTime = differenceInMinutes(
             currentTime,
             queue.lastTokenId.checkedOutTime
           );
 
-          console.log('WaitTime is : ', waitTime);
+          console.log("WaitTime is : ", waitTime);
           queue.waitTime = waitTime + queue.waitTime;
 
           token.isActive = true;
           token.tokenActivationTime = currentTime;
           queue.activeTokenId = token._id;
 
-          io.emit('tokenUpdate', {
+          io.emit("tokenUpdate", {
             data: {
               offset: queue.offset,
               waitTime: queue.waitTime,
@@ -686,35 +686,35 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
               active: token,
               isEmergency: token.isEmergency,
             },
-            message: 'Est. turn time updated successfully',
+            message: "Est. turn time updated successfully",
             success: true,
           });
         } else {
-          console.log('queue.activeTokenId');
+          console.log("queue.activeTokenId");
 
           if (!isValid) {
-            console.log('!isValid');
+            console.log("!isValid");
             if (!queue.exceptional.includes(token.tokenNumber))
               queue.exceptional = [
                 ...(queue.exceptional || []),
                 token.tokenNumber,
               ];
 
-            io.emit('tokenUpdate', {
+            io.emit("tokenUpdate", {
               data: {
                 offset: queue.offset,
                 waitTime: queue.waitTime,
                 exceptional: queue.exceptional,
               },
-              message: 'Est. turn time updated successfully',
+              message: "Est. turn time updated successfully",
               success: true,
             });
           }
         }
       } else {
-        console.log('!queue.lastTokenId');
+        console.log("!queue.lastTokenId");
         if (queue.activeTokenId) {
-          console.log('queue.activeTokenId');
+          console.log("queue.activeTokenId");
 
           if (!isValid) {
             // console.log('!isValid');
@@ -724,18 +724,18 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
                 token.tokenNumber,
               ];
 
-            io.emit('tokenUpdate', {
+            io.emit("tokenUpdate", {
               data: {
                 offset: queue.offset,
                 waitTime: queue.waitTime,
                 exceptional: queue.exceptional,
               },
-              message: 'Est. turn time updated successfully',
+              message: "Est. turn time updated successfully",
               success: true,
             });
           }
         } else {
-          console.log('!queue.activeTokenId');
+          console.log("!queue.activeTokenId");
 
           token.tokenActivationTime = currentTime;
 
@@ -743,13 +743,13 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 
           const parsedDate = parse(
             clinic.clinicOpeningTime,
-            'hh:mm a',
+            "hh:mm a",
             new Date()
           );
           queue.activeTokenId = token._id;
           token.isActive = true;
 
-          console.log('addHours(parsedDate, 5) ');
+          console.log("addHours(parsedDate, 5) ");
 
           const waitTime = differenceInMinutes(
             currentTime,
@@ -757,9 +757,9 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
           );
           queue.waitTime = waitTime;
 
-          console.log('io.emit');
+          console.log("io.emit");
 
-          io.emit('tokenUpdate', {
+          io.emit("tokenUpdate", {
             data: {
               offset: queue.offset,
               waitTime: waitTime,
@@ -767,14 +767,14 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
               active: token,
               isEmergency: token.isEmergency,
             },
-            message: 'Est. turn time updated successfully',
+            message: "Est. turn time updated successfully",
             success: true,
           });
         }
       }
       break;
 
-    case 'cancelled':
+    case "cancelled":
       token.isActive = false;
       token.checkInOutStatus = checkInOutStatus;
       token.cancellationDetails = {
@@ -793,33 +793,35 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
         queue.activeTokenId = null;
       }
 
-      io.emit('tokenUpdate', {
+      io.emit("tokenUpdate", {
         data: {
           offset: queue.offset,
           waitTime: queue.waitTime,
           exceptional: queue.exceptional,
         },
-        message: 'Token cancelled successfully',
+        message: "Token cancelled successfully",
         success: true,
       });
       break;
 
     default:
-      throw new ApiError(400, 'Bad status for token');
+      throw new ApiError(400, "Bad status for token");
   }
   await queue.save();
   await token.save();
 
-  res.json(new ApiResponse(200, token, 'Token status updated successfully'));
+  res.json(new ApiResponse(200, token, "Token status updated successfully"));
 });
 
 // @@ Get token history
 export const getTokenHistory = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  const tokens = await UserToken.find({userId}).sort({tokenGenerationTime: -1});
+  const tokens = await UserToken.find({ userId }).sort({
+    tokenGenerationTime: -1,
+  });
   if (!tokens || tokens.length === 0) {
-    throw new ApiError(404, 'No tokens found for this user');
+    throw new ApiError(404, "No tokens found for this user");
   }
 
   // Format the tokens with proper timezone handling
@@ -830,7 +832,7 @@ export const getTokenHistory = asyncHandler(async (req, res) => {
       // If date is already a Date object, use it directly
       const dateObj = date instanceof Date ? date : parseISO(date);
       const pakistanDate = addHours(dateObj, 5);
-      return format(pakistanDate, 'yyyy-MM-dd');
+      return format(pakistanDate, "yyyy-MM-dd");
     };
 
     const formatTime = (date) => {
@@ -838,7 +840,7 @@ export const getTokenHistory = asyncHandler(async (req, res) => {
       // If date is already a Date object, use it directly
       const dateObj = date instanceof Date ? date : parseISO(date);
       const pakistanDate = addHours(dateObj, 5);
-      return format(pakistanDate, 'HH:mm');
+      return format(pakistanDate, "HH:mm");
     };
 
     const formatDateTime = (date) => {
@@ -846,7 +848,7 @@ export const getTokenHistory = asyncHandler(async (req, res) => {
       // If date is already a Date object, use it directly
       const dateObj = date instanceof Date ? date : parseISO(date);
       const pakistanDate = addHours(dateObj, 5);
-      return format(pakistanDate, 'yyyy-MM-dd HH:mm');
+      return format(pakistanDate, "yyyy-MM-dd HH:mm");
     };
 
     return {
@@ -865,17 +867,17 @@ export const getTokenHistory = asyncHandler(async (req, res) => {
       new ApiResponse(
         200,
         formattedTokens,
-        'Token history retrieved successfully'
+        "Token history retrieved successfully"
       )
     );
 });
 
 // Get all tokens for a specific date
 export const getAllTokensByDate = asyncHandler(async (req, res) => {
-  const {date} = req.query;
+  const { date } = req.query;
 
   if (!date) {
-    throw new ApiError(400, 'Date parameter is required');
+    throw new ApiError(400, "Date parameter is required");
   }
 
   const parseDate = (dateInput) => {
@@ -889,18 +891,18 @@ export const getAllTokensByDate = asyncHandler(async (req, res) => {
   const dayEnd = addHours(dayStart, 24);
 
   const tokens = await UserToken.find({
-    date: {$gte: dayStart, $lt: dayEnd},
+    date: { $gte: dayStart, $lt: dayEnd },
   })
-    .sort({tokenGenerationTime: 1})
+    .sort({ tokenGenerationTime: 1 })
     .select(
-      'tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime estimatedEndTime isActive userId'
+      "tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime estimatedEndTime isActive userId"
     )
-    .populate('userId', 'name email');
+    .populate("userId", "name email");
 
   if (!tokens || tokens.length === 0) {
     throw new ApiError(
       404,
-      `No tokens found for date: ${format(dayStart, 'yyyy-MM-dd')}`
+      `No tokens found for date: ${format(dayStart, "yyyy-MM-dd")}`
     );
   }
 
@@ -908,32 +910,32 @@ export const getAllTokensByDate = asyncHandler(async (req, res) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = addHours(dateObj, 5);
-    return format(pakistanDate, 'HH:mm');
+    return format(pakistanDate, "HH:mm");
   };
 
   const formatDateTime = (date) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = addHours(dateObj, 5);
-    return format(pakistanDate, 'yyyy-MM-dd HH:mm');
+    return format(pakistanDate, "yyyy-MM-dd HH:mm");
   };
 
   const totalTokens = tokens.length;
   const activeTokens = tokens.filter((token) => token.isActive).length;
   const statusCounts = {
-    pending: tokens.filter((token) => token.checkInOutStatus === 'pending')
+    pending: tokens.filter((token) => token.checkInOutStatus === "pending")
       .length,
-    onsite: tokens.filter((token) => token.checkInOutStatus === 'onsite')
+    onsite: tokens.filter((token) => token.checkInOutStatus === "onsite")
       .length,
-    completed: tokens.filter((token) => token.checkInOutStatus === 'completed')
+    completed: tokens.filter((token) => token.checkInOutStatus === "completed")
       .length,
-    cancelled: tokens.filter((token) => token.checkInOutStatus === 'cancelled')
+    cancelled: tokens.filter((token) => token.checkInOutStatus === "cancelled")
       .length,
   };
 
   const formattedTokens = tokens.map((token) => ({
     ...token.toObject(),
-    date: format(parseDate(token.date), 'yyyy-MM-dd'),
+    date: format(parseDate(token.date), "yyyy-MM-dd"),
     estimatedTurnTime: formatTime(token.estimatedTurnTime),
     tokenGenerationTime: formatDateTime(token.tokenGenerationTime),
     estimatedEndTime: formatTime(token.estimatedEndTime),
@@ -953,11 +955,11 @@ export const getAllTokensByDate = asyncHandler(async (req, res) => {
           active: activeTokens,
           ...statusCounts,
         },
-        date: format(dayStart, 'yyyy-MM-dd'),
+        date: format(dayStart, "yyyy-MM-dd"),
       },
       `Tokens retrieved successfully for date: ${format(
         dayStart,
-        'yyyy-MM-dd'
+        "yyyy-MM-dd"
       )}`
     )
   );
@@ -966,10 +968,10 @@ export const getAllTokensByDate = asyncHandler(async (req, res) => {
 // @@ Get the active token for a specific date
 export const getActiveTokenByDate = asyncHandler(async (req, res) => {
   const socket = req.io;
-  const {date} = req.body;
+  const { date } = req.body;
 
   if (!date) {
-    throw new ApiError(400, 'Date parameter is required');
+    throw new ApiError(400, "Date parameter is required");
   }
 
   const parseDate = (dateInput) => {
@@ -983,39 +985,39 @@ export const getActiveTokenByDate = asyncHandler(async (req, res) => {
   const dayEnd = addHours(dayStart, 24);
 
   const activeToken = await UserToken.findOne({
-    date: {$gte: dayStart, $lt: dayEnd},
+    date: { $gte: dayStart, $lt: dayEnd },
     isActive: true,
   }).select(
-    'tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime estimatedEndTime'
+    "tokenNumber date estimatedTurnTime checkInOutStatus tokenGenerationTime estimatedEndTime"
   );
 
   if (!activeToken) {
-    throw new ApiError(404, 'No active token found for the specified date');
+    throw new ApiError(404, "No active token found for the specified date");
   }
 
   const formatTime = (date) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = addHours(dateObj, 5);
-    return format(pakistanDate, 'HH:mm');
+    return format(pakistanDate, "HH:mm");
   };
 
   const formatDateTime = (date) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = addHours(dateObj, 5);
-    return format(pakistanDate, 'yyyy-MM-dd HH:mm');
+    return format(pakistanDate, "yyyy-MM-dd HH:mm");
   };
 
   const formattedToken = {
     ...activeToken.toObject(),
-    date: format(parseDate(activeToken.date), 'yyyy-MM-dd'),
+    date: format(parseDate(activeToken.date), "yyyy-MM-dd"),
     estimatedTurnTime: formatTime(activeToken.estimatedTurnTime),
     tokenGenerationTime: formatDateTime(activeToken.tokenGenerationTime),
     estimatedEndTime: formatTime(activeToken.estimatedEndTime),
   };
 
-  socket.emit('activeToken', {data: formattedToken});
+  socket.emit("activeToken", { data: formattedToken });
 
   res
     .status(200)
@@ -1023,25 +1025,25 @@ export const getActiveTokenByDate = asyncHandler(async (req, res) => {
       new ApiResponse(
         200,
         formattedToken,
-        'Active token retrieved successfully'
+        "Active token retrieved successfully"
       )
     );
 });
 
 // @@ Get tokens by status
 export const getTokensByStatus = asyncHandler(async (req, res) => {
-  const {status} = req.query;
+  const { status } = req.query;
   const userId = req.user._id;
 
   if (!status) {
-    throw new ApiError(400, 'Status parameter is required');
+    throw new ApiError(400, "Status parameter is required");
   }
 
-  const validStatuses = ['pending', 'onsite', 'completed', 'cancelled'];
+  const validStatuses = ["pending", "onsite", "completed", "cancelled"];
   if (!validStatuses.includes(status)) {
     throw new ApiError(
       400,
-      `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+      `Invalid status. Must be one of: ${validStatuses.join(", ")}`
     );
   }
 
@@ -1054,7 +1056,7 @@ export const getTokensByStatus = asyncHandler(async (req, res) => {
   const tokens = await UserToken.find({
     userId,
     checkInOutStatus: status,
-  }).sort({tokenGenerationTime: -1});
+  }).sort({ tokenGenerationTime: -1 });
 
   if (!tokens || tokens.length === 0) {
     throw new ApiError(404, `No ${status} tokens found for this user`);
@@ -1064,19 +1066,19 @@ export const getTokensByStatus = asyncHandler(async (req, res) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = addHours(dateObj, 5);
-    return format(pakistanDate, 'HH:mm');
+    return format(pakistanDate, "HH:mm");
   };
 
   const formatDateTime = (date) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = addHours(dateObj, 5);
-    return format(pakistanDate, 'yyyy-MM-dd HH:mm');
+    return format(pakistanDate, "yyyy-MM-dd HH:mm");
   };
 
   const formattedTokens = tokens.map((token) => ({
     ...token.toObject(),
-    date: format(parseDate(token.date), 'yyyy-MM-dd'),
+    date: format(parseDate(token.date), "yyyy-MM-dd"),
     estimatedTurnTime: formatTime(token.estimatedTurnTime),
     tokenGenerationTime: formatDateTime(token.tokenGenerationTime),
     estimatedEndTime: formatTime(token.estimatedEndTime),
@@ -1086,7 +1088,7 @@ export const getTokensByStatus = asyncHandler(async (req, res) => {
   const statusCounts = await Promise.all(
     validStatuses.map(async (s) => ({
       status: s,
-      count: await UserToken.countDocuments({userId, checkInOutStatus: s}),
+      count: await UserToken.countDocuments({ userId, checkInOutStatus: s }),
     }))
   );
 
@@ -1120,7 +1122,7 @@ export const getUserToken = asyncHandler(async (req, res) => {
     isActive: true,
   });
 
-  socket.emit('tokenUpdate', {
+  socket.emit("tokenUpdate", {
     data: {
       offset: queue?.offset || 0,
       waitTime: queue?.waitTime || 0,
@@ -1129,7 +1131,7 @@ export const getUserToken = asyncHandler(async (req, res) => {
       isEmergency: token.isEmergency,
       doctorAvailability: settings.doctorAvailability,
     },
-    message: 'Est. turn time updated successfully',
+    message: "Est. turn time updated successfully",
     success: true,
   });
 
@@ -1148,14 +1150,14 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   if (!clinic) {
     throw new ApiError(
       404,
-      'Clinic settings not found. Please visit the clinic'
+      "Clinic settings not found. Please visit the clinic"
     );
   }
   const requestedDate = formatISO(date);
 
-  console.log('req : ', parseISO(requestedDate));
+  console.log("req : ", parseISO(requestedDate));
 
-  let today = TZDate.tz('Asia/Karachi').toISOString();
+  let today = TZDate.tz("Asia/Karachi").toISOString();
 
   const existingToken = await UserToken.findOne({
     userId,
@@ -1163,12 +1165,12 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   });
 
   if (existingToken) {
-    throw new ApiError(400, 'You already have an active token for today.');
+    throw new ApiError(400, "You already have an active token for today.");
   }
 
   const clinicDate = parse(
     clinic.clinicOpeningTime,
-    'hh:mm a',
+    "hh:mm a",
     addHours(new Date(), 5)
   );
   const openingHours = getHours(clinicDate);
@@ -1181,7 +1183,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     milliseconds: 0,
   });
 
-  const openingTime = new TZDate(todayWithTime, 'Asia/Karachi');
+  const openingTime = new TZDate(todayWithTime, "Asia/Karachi");
 
   // Find the queue for today
   let queue = await Queue.findOne({
@@ -1194,7 +1196,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
 
   let estimatedTurnTime;
   if (queue && queue.upcomingTokenIds.length > 0) {
-    console.log('finally if');
+    console.log("finally if");
     const lastTokenId =
       queue.upcomingTokenIds[queue.upcomingTokenIds.length - 1];
     const lastToken = await UserToken.findById(lastTokenId);
@@ -1229,7 +1231,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     tokenNumber,
     estimatedTurnTime: estimatedTurnTime,
     date: addHours(parseISO(requestedDate), 5),
-    checkInOutStatus: 'pending',
+    checkInOutStatus: "pending",
     isActive: isActive,
     tokenGenerationTime: addHours(parseISO(today), 5),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
@@ -1237,7 +1239,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
 
   res
     .status(200)
-    .json(new ApiResponse(200, requiredToken, 'Token generated successfully'));
+    .json(new ApiResponse(200, requiredToken, "Token generated successfully"));
 });
 
 // @@ Get active tokens for table with pagination and filters
@@ -1246,11 +1248,11 @@ export const getActiveTokensTable = async (req, res) => {
     const {
       page = 1,
       limit = 7,
-      search = '',
+      search = "",
       status,
       date,
-      sortField = 'tokenGenerationTime',
-      sortOrder = 'desc',
+      sortField = "tokenGenerationTime",
+      sortOrder = "desc",
     } = req.query;
     const skip = (page - 1) * limit;
 
@@ -1269,23 +1271,23 @@ export const getActiveTokensTable = async (req, res) => {
         $gte: dayStart,
         $lt: dayEnd,
       },
-      checkInOutStatus: {$in: ['pending', 'onsite']},
+      checkInOutStatus: { $in: ["pending", "onsite"] },
     };
 
-    if (status && ['pending', 'onsite'].includes(status)) {
+    if (status && ["pending", "onsite"].includes(status)) {
       query.checkInOutStatus = status;
     }
 
     if (search) {
       const users = await User.find({
         $or: [
-          {name: {$regex: search, $options: 'i'}},
-          {email: {$regex: search, $options: 'i'}},
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
         ],
-      }).select('_id');
+      }).select("_id");
 
       if (users.length > 0) {
-        query.userId = {$in: users.map((user) => user._id)};
+        query.userId = { $in: users.map((user) => user._id) };
       } else {
         return res.status(200).json({
           success: true,
@@ -1298,25 +1300,25 @@ export const getActiveTokensTable = async (req, res) => {
     }
 
     let sortConfig = {};
-    if (sortField === 'tokenNumber') {
-      sortConfig = {tokenNumber: sortOrder === 'asc' ? 1 : -1};
-    } else if (sortField === 'tokenGenerationTime') {
-      sortConfig = {tokenGenerationTime: sortOrder === 'asc' ? 1 : -1};
-    } else if (sortField === 'estimatedTurnTime') {
-      sortConfig = {estimatedTurnTime: sortOrder === 'asc' ? 1 : -1};
-    } else if (sortField === 'date') {
-      sortConfig = {date: sortOrder === 'asc' ? 1 : -1};
-    } else if (sortField === 'status') {
-      sortConfig = {checkInOutStatus: sortOrder === 'asc' ? 1 : -1};
+    if (sortField === "tokenNumber") {
+      sortConfig = { tokenNumber: sortOrder === "asc" ? 1 : -1 };
+    } else if (sortField === "tokenGenerationTime") {
+      sortConfig = { tokenGenerationTime: sortOrder === "asc" ? 1 : -1 };
+    } else if (sortField === "estimatedTurnTime") {
+      sortConfig = { estimatedTurnTime: sortOrder === "asc" ? 1 : -1 };
+    } else if (sortField === "date") {
+      sortConfig = { date: sortOrder === "asc" ? 1 : -1 };
+    } else if (sortField === "status") {
+      sortConfig = { checkInOutStatus: sortOrder === "asc" ? 1 : -1 };
     } else {
-      sortConfig = {tokenGenerationTime: -1};
+      sortConfig = { tokenGenerationTime: -1 };
     }
 
     const tokens = await UserToken.find(query)
       .populate({
-        path: 'userId',
-        select: 'name email',
-        match: {_id: {$exists: true}},
+        path: "userId",
+        select: "name email",
+        match: { _id: { $exists: true } },
       })
       .sort(sortConfig)
       .skip(skip)
@@ -1329,8 +1331,8 @@ export const getActiveTokensTable = async (req, res) => {
       .map((token) => ({
         id: token._id,
         tokenNumber: token.tokenNumber,
-        full_name: token.userId?.name || 'Unknown User',
-        email: token.userId?.email || 'No Email',
+        full_name: token.userId?.name || "Unknown User",
+        email: token.userId?.email || "No Email",
         status: token.checkInOutStatus,
         tokenGenerationTime: token.tokenGenerationTime,
         estimatedTurnTime: token.estimatedTurnTime,
@@ -1347,84 +1349,30 @@ export const getActiveTokensTable = async (req, res) => {
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    console.error('Error in getActiveTokensTable:', error);
+    console.error("Error in getActiveTokensTable:", error);
     res
       .status(500)
       .json(
         new ApiResponse(
           500,
           null,
-          error.message || 'Error fetching active tokens'
+          error.message || "Error fetching active tokens"
         )
       );
   }
 };
 
-// @@ Update token status from table
-export const updateTokenStatusTable = async (req, res) => {
-  try {
-    const {tokenId} = req.params;
-    const {status} = req.body;
-
-    console.log('Received update request:', {tokenId, status});
-
-    if (!status || !['pending', 'onsite'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Invalid status provided. Only "pending" and "onsite" are allowed.',
-      });
-    }
-
-    const token = await UserToken.findById(tokenId);
-    console.log('Found token:', token);
-
-    if (!token) {
-      return res.status(404).json({
-        success: false,
-        message: 'Token not found',
-      });
-    }
-
-    token.checkInOutStatus = status;
-
-    if (status === 'onsite') {
-      token.tokenActivationTime = new Date();
-    }
-
-    await token.save();
-    console.log('Token updated successfully');
-
-    res.status(200).json({
-      success: true,
-      message: 'Token status updated successfully',
-      token: {
-        id: token._id,
-        status: token.checkInOutStatus,
-        tokenActivationTime: token.tokenActivationTime,
-      },
-    });
-  } catch (error) {
-    console.error('Error in updateTokenStatusTable:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error updating token status',
-      error: error.message,
-    });
-  }
-};
-
 // @@ Delete token
 export const deleteToken = asyncHandler(async (req, res) => {
-  const {tokenId} = req.params;
+  const { tokenId } = req.params;
 
   const token = await UserToken.findById(tokenId);
   if (!token) {
-    throw new ApiError(404, 'Token not found');
+    throw new ApiError(404, "Token not found");
   }
 
   const queue = await Queue.findOne({
-    $or: [{activeTokenId: tokenId}, {upcomingTokenIds: tokenId}],
+    $or: [{ activeTokenId: tokenId }, { upcomingTokenIds: tokenId }],
   });
 
   if (queue) {
@@ -1445,14 +1393,14 @@ export const deleteToken = asyncHandler(async (req, res) => {
 
   await UserToken.findByIdAndDelete(tokenId);
 
-  io.emit('tokenDeleted', {
+  io.emit("tokenDeleted", {
     tokenId,
-    message: 'Token deleted successfully',
+    message: "Token deleted successfully",
   });
 
   res
     .status(200)
-    .json(new ApiResponse(200, null, 'Token deleted successfully'));
+    .json(new ApiResponse(200, null, "Token deleted successfully"));
 });
 
 // @@ Get today's patients
@@ -1460,9 +1408,9 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
   const {
     page = 1,
     limit = 10,
-    search = '',
-    sortField = 'tokenGenerationTime',
-    sortOrder = 'desc',
+    search = "",
+    sortField = "tokenGenerationTime",
+    sortOrder = "desc",
   } = req.query;
 
   try {
@@ -1481,7 +1429,7 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
     const startTime = addHours(startOfToday, 5);
     const endTime = addHours(endOfToday, 5);
 
-    console.log('Date Range:', {
+    console.log("Date Range:", {
       startTime,
       endTime,
       currentServerTime: new Date(),
@@ -1491,13 +1439,13 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
     if (search) {
       const users = await User.find({
         $or: [
-          {name: {$regex: search, $options: 'i'}},
-          {email: {$regex: search, $options: 'i'}},
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
         ],
-      }).select('_id');
+      }).select("_id");
 
       if (users.length > 0) {
-        userQuery = {userId: {$in: users.map((user) => user._id)}};
+        userQuery = { userId: { $in: users.map((user) => user._id) } };
       }
     }
 
@@ -1509,30 +1457,30 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
       ...(search && userQuery),
     };
 
-    console.log('Query:', JSON.stringify(query, null, 2));
+    console.log("Query:", JSON.stringify(query, null, 2));
 
     const total = await UserToken.countDocuments(query);
-    console.log('Total tokens for today:', total);
+    console.log("Total tokens for today:", total);
 
     const tokens = await UserToken.find(query)
       .populate({
-        path: 'userId',
-        select: 'name email',
+        path: "userId",
+        select: "name email",
       })
-      .sort({[sortField]: sortOrder === 'asc' ? 1 : -1})
+      .sort({ [sortField]: sortOrder === "asc" ? 1 : -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit))
       .lean();
 
-    console.log('Found tokens for today:', tokens.length);
+    console.log("Found tokens for today:", tokens.length);
 
     const formattedTokens = tokens
       .filter((token) => token.userId)
       .map((token) => ({
         id: token._id,
         tokenNumber: token.tokenNumber,
-        full_name: token.userId?.name || 'Unknown User',
-        email: token.userId?.email || 'No Email',
+        full_name: token.userId?.name || "Unknown User",
+        email: token.userId?.email || "No Email",
         estimatedTurnTime: token.estimatedTurnTime,
         tokenGenerationTime: token.tokenGenerationTime,
         date: token.date,
@@ -1542,19 +1490,19 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
     const statusCounts = {
       pending: await UserToken.countDocuments({
         ...query,
-        checkInOutStatus: 'pending',
+        checkInOutStatus: "pending",
       }),
       onsite: await UserToken.countDocuments({
         ...query,
-        checkInOutStatus: 'onsite',
+        checkInOutStatus: "onsite",
       }),
       completed: await UserToken.countDocuments({
         ...query,
-        checkInOutStatus: 'completed',
+        checkInOutStatus: "completed",
       }),
       cancelled: await UserToken.countDocuments({
         ...query,
-        checkInOutStatus: 'cancelled',
+        checkInOutStatus: "cancelled",
       }),
     };
 
@@ -1567,37 +1515,37 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
       totalPages: Math.ceil(total / parseInt(limit)),
     });
   } catch (error) {
-    console.error('Error in getTodayPatients:', error);
+    console.error("Error in getTodayPatients:", error);
     throw new ApiError(500, error.message || "Error fetching today's patients");
   }
 });
 
 // @@ Get generateEmergencyToken's patients
 export const generateEmergencyToken = asyncHandler(async (req, res) => {
-  const {date} = req.body;
+  const { date } = req.body;
   const userId = req.userId;
   const currentTime = addHours(new Date(), 5);
 
   if (!date) {
-    throw new ApiError(400, 'Missing required field: date');
+    throw new ApiError(400, "Missing required field: date");
   }
 
   const clinic = await Clinic.findOne();
   if (!clinic) {
     throw new ApiError(
       404,
-      'Clinic settings not found. Please visit the clinic'
+      "Clinic settings not found. Please visit the clinic"
     );
   }
 
   // Convert provided date and today to start of the day (without time)
   const requestedDate = formatISO(
-    addHours(new TZDate(date, 'Asia/Karachi'), 5).setHours(0, 0, 0, 0),
+    addHours(new TZDate(date, "Asia/Karachi"), 5).setHours(0, 0, 0, 0),
     {
-      representation: 'complete',
+      representation: "complete",
     }
   );
-  let today = TZDate.tz('Asia/Karachi').toISOString();
+  let today = TZDate.tz("Asia/Karachi").toISOString();
 
   // // //Uncomment the below feature if you are done with the development
 
@@ -1616,7 +1564,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   });
 
   if (existingToken) {
-    throw new ApiError(400, 'You already have an active token for today.');
+    throw new ApiError(400, "You already have an active token for today.");
   }
 
   // Convert clinic opening and closing times to today's full DateTime
@@ -1628,7 +1576,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
 
   const clinicDate = parse(
     clinic.clinicOpeningTime,
-    'hh:mm a',
+    "hh:mm a",
     addHours(new Date(), 5)
   );
   const openingHours = getHours(clinicDate);
@@ -1643,7 +1591,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
 
   const clinicClosingTime = parse(
     clinic.clinicClosingTime,
-    'hh:mm a',
+    "hh:mm a",
     addHours(new Date(), 5)
   );
   const closingHours = getHours(clinicClosingTime);
@@ -1656,11 +1604,11 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
     milliseconds: 0,
   });
 
-  const openingTime = new TZDate(todayWithTime, 'Asia/Karachi');
+  const openingTime = new TZDate(todayWithTime, "Asia/Karachi");
 
   const closingTime = new TZDate(
     todayWithTimeClose,
-    'Asia/Karachi'
+    "Asia/Karachi"
   ).toISOString();
 
   const tokenStartTime = addMinutes(openingTime, -15);
@@ -1677,7 +1625,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   // Find the queue for today
   let queue = await Queue.findOne({
     date: addHours(parseISO(requestedDate), 5),
-  }).populate('activeTokenId lastTokenId');
+  }).populate("activeTokenId lastTokenId");
 
   // Determine estimated turn time
   let estimatedTurnTime;
@@ -1686,7 +1634,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
       queue.upcomingTokenIds[queue.upcomingTokenIds.length - 1];
     const lastToken = await UserToken.findById(lastTokenId);
 
-    console.log('lastToken : ', lastToken);
+    console.log("lastToken : ", lastToken);
 
     estimatedTurnTime = addMinutes(
       lastToken.estimatedTurnTime,
@@ -1726,7 +1674,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
       tokenNumber,
       estimatedTurnTime: addHours(parseISO(today), 5),
       date: addHours(parseISO(requestedDate), 5),
-      checkInOutStatus: 'onsite',
+      checkInOutStatus: "onsite",
       isActive: true,
       tokenGenerationTime: addHours(parseISO(today), 5),
       estimatedEndTime: addMinutes(addHours(parseISO(today), 5), 10),
@@ -1745,7 +1693,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
         tokenNumber,
         estimatedTurnTime: addHours(parseISO(today), 5),
         date: addHours(parseISO(requestedDate), 5),
-        checkInOutStatus: 'onsite',
+        checkInOutStatus: "onsite",
         isActive: true,
         tokenGenerationTime: addHours(parseISO(today), 5),
         estimatedEndTime: addMinutes(addHours(parseISO(today), 5), 10),
@@ -1776,7 +1724,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
         tokenNumber,
         estimatedTurnTime: estimatedTurnTime,
         date: addHours(parseISO(requestedDate), 5),
-        checkInOutStatus: 'onsite',
+        checkInOutStatus: "onsite",
         isActive: true,
         tokenGenerationTime: addHours(parseISO(today), 5),
         estimatedEndTime: addMinutes(estimatedTurnTime, 10),
@@ -1793,7 +1741,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   queue.upcomingTokenIds.push(userToken._id);
   await queue.save();
 
-  io.emit('tokenUpdate', {
+  io.emit("tokenUpdate", {
     data: {
       offset: queue?.offset || 0,
       waitTime: queue?.waitTime || 0,
@@ -1805,5 +1753,5 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
 
   res
     .status(201)
-    .json(new ApiResponse(201, userToken, 'Token generated successfully'));
+    .json(new ApiResponse(201, userToken, "Token generated successfully"));
 });
