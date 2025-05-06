@@ -197,9 +197,11 @@ export const generateToken = asyncHandler(async (req, res) => {
     const now = addHours(new Date(), 5);
     estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
 
-    console.log(
-      isAfter(now, addHours(parseISO(formatISO(openingTime)), 5)) && !queue
-    );
+    // console.log(now,);
+    // console.log(
+    //   isAfter(now, addHours(parseISO(formatISO(openingTime)), 5)) && !queue
+    // );
+
     if (isAfter(now, addHours(parseISO(formatISO(openingTime)), 5))) {
       if (!queue || queue.upcomingTokenIds.length === 0)
         queue.waitTime = differenceInMinutes(
@@ -239,7 +241,16 @@ export const generateToken = asyncHandler(async (req, res) => {
   await userToken.save();
 
   queue.upcomingTokenIds.push(userToken._id);
+  // io.emit('queue', {
+  //   queue: queue.upcomingTokenIds,
+  // });
   await queue.save();
+
+  const fullQueue = await Queue.findOne().populate('upcomingTokenIds');
+
+  io.emit('queue', {
+    queue: fullQueue.upcomingTokenIds,
+  });
 
   res
     .status(201)
@@ -472,6 +483,33 @@ export const getQueueStatus = asyncHandler(async (req, res) => {
   })
     .populate('upcomingTokenIds')
     .lean();
+
+  res.json(
+    new ApiResponse(
+      200,
+      allTokens?.upcomingTokenIds,
+      'Tokens retrieved successfully'
+    )
+  );
+});
+
+export const getQueueDoctor = asyncHandler(async (req, res) => {
+  const targetDate = new Date();
+
+  const startOfDay = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
+  const endOfDay = addHours(new Date(targetDate.setHours(23, 59, 59, 999)), 5);
+
+  const allTokens = await Queue.findOne({
+    date: {$gte: startOfDay, $lt: endOfDay},
+  })
+    .populate('upcomingTokenIds')
+    .lean();
+
+  console.log(allTokens);
+
+  io.emit('queue', {
+    queue: allTokens?.upcomingTokenIds || [],
+  });
 
   res.json(
     new ApiResponse(
@@ -807,8 +845,14 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
     default:
       throw new ApiError(400, 'Bad status for token');
   }
+
   await queue.save();
   await token.save();
+  const fullQueue = await Queue.findOne().populate('upcomingTokenIds');
+
+  io.emit('queue', {
+    queue: fullQueue.upcomingTokenIds,
+  });
 
   res.json(new ApiResponse(200, token, 'Token status updated successfully'));
 });
@@ -1125,8 +1169,8 @@ export const getUserToken = asyncHandler(async (req, res) => {
       offset: queue?.offset || 0,
       waitTime: queue?.waitTime || 0,
       exceptional: queue?.exceptional || [],
-      active: token,
-      isEmergency: token.isEmergency,
+      active: token || null,
+      isEmergency: token?.isEmergency || false,
       doctorAvailability: settings.doctorAvailability,
     },
     message: 'Est. turn time updated successfully',
@@ -1141,8 +1185,16 @@ export const getUserToken = asyncHandler(async (req, res) => {
 });
 
 export const myTokenDetail = asyncHandler(async (req, res) => {
+  // get timezone
+  // const zonalArea = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const targetDate = new Date();
+  const date = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
   const userId = req.user._id;
-  const date = addHours(new Date(), 5);
+
+  if (!date) {
+    throw new ApiError(400, 'Missing required field: date');
+  }
 
   const clinic = await Clinic.findOne();
   if (!clinic) {
@@ -1151,20 +1203,50 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
       'Clinic settings not found. Please visit the clinic'
     );
   }
-  const requestedDate = formatISO(date);
 
-  console.log('req : ', parseISO(requestedDate));
+  // const settings = await PrivacySettings.findOne({}).lean();
 
+  if (!clinic.tokenGenerationStatus)
+    throw new ApiError(
+      400,
+      'Cannot generate new token since doctor is unavailable at this moment.'
+    );
+
+  // Convert provided date and today to start of the day (without time)
+  const requestedDate = formatISO(
+    addHours(new TZDate(date, 'Asia/Karachi'), 5).setHours(0, 0, 0, 0),
+    {
+      representation: 'complete',
+    }
+  );
   let today = TZDate.tz('Asia/Karachi').toISOString();
 
+  // // //Uncomment the below feature if you are done with the development
+
+  // if (
+  //   !isSameDay(requestedDate, today, {
+  //     in: tz("Asia/Karachi"),
+  //   })
+  // ) {
+  //   throw new ApiError(400, "Cannot generate tokens for past or future dates.");
+  // }
+
+  // Check if user already has an active token for the selected date
   const existingToken = await UserToken.findOne({
     userId,
-    date: parseISO(requestedDate),
+    date: requestedDate,
   });
 
   if (existingToken) {
     throw new ApiError(400, 'You already have an active token for today.');
   }
+
+  // Convert clinic opening and closing times to today's full DateTime
+  // const clinicOpenStoredTime = parse(
+  //   clinic.clinicOpeningTime,
+  //   'hh:mm a',
+  //   today
+  // );
 
   const clinicDate = parse(
     clinic.clinicOpeningTime,
@@ -1181,41 +1263,105 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     milliseconds: 0,
   });
 
+  const clinicClosingTime = parse(
+    clinic.clinicClosingTime,
+    'hh:mm a',
+    addHours(new Date(), 5)
+  );
+  const closingHours = getHours(clinicClosingTime);
+  const closingMinutes = getMinutes(clinicClosingTime);
+
+  const todayWithTimeClose = set(today, {
+    hours: closingHours,
+    minutes: closingMinutes,
+    seconds: 0,
+    milliseconds: 0,
+  });
+
   const openingTime = new TZDate(todayWithTime, 'Asia/Karachi');
+
+  const closingTime = new TZDate(
+    todayWithTimeClose,
+    'Asia/Karachi'
+  ).toISOString();
+
+  const tokenStartTime = addMinutes(openingTime, -15);
+
+  // // Uncomment this when you are done with the coding
+
+  // if (
+  //   isBefore(today, tokenStartTime.toISOString()) ||
+  //   isAfter(today, closingTime)
+  // ) {
+  //   throw new ApiError(400, 'Cannot generate token outside clinic hours.');
+  // }
 
   // Find the queue for today
   let queue = await Queue.findOne({
-    date: parseISO(requestedDate),
-  }).lean();
+    date: addHours(parseISO(requestedDate), 5),
+  }).populate('upcomingTokenIds');
 
-  let isActive = false;
+  if (!queue) {
+    queue = new Queue({
+      date: addHours(parseISO(requestedDate), 5),
+      activeTokenId: null,
+      upcomingTokenIds: [],
+    });
+  }
 
   // Determine estimated turn time
-
   let estimatedTurnTime;
-  if (queue && queue.upcomingTokenIds.length > 0) {
-    console.log('finally if');
-    const lastTokenId =
-      queue.upcomingTokenIds[queue.upcomingTokenIds.length - 1];
-    const lastToken = await UserToken.findById(lastTokenId);
+  if (queue.upcomingTokenIds.length > 0) {
+    const lastTokenId = queue.upcomingTokenIds
+      .filter((item) => item.isEmergency === false)
+      .pop();
 
-    estimatedTurnTime = addMinutes(
-      lastToken.estimatedTurnTime,
-      10
-    ).toISOString();
+    if (lastTokenId) {
+      const lastToken = await UserToken.findById(lastTokenId._id);
+
+      estimatedTurnTime = addMinutes(
+        lastToken.estimatedTurnTime,
+        10
+      ).toISOString();
+    } else {
+      const activeToken = await UserToken.findOne({
+        isActive: true,
+        isEmergency: true,
+      }).lean();
+
+      if (activeToken && activeToken.tokenNumber === 1) {
+        estimatedTurnTime = activeToken.tokenActivationTime;
+      } else {
+        estimatedTurnTime = openingTime.toISOString();
+        const now = addHours(new Date(), 5);
+        estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
+
+        if (isAfter(now, addHours(parseISO(formatISO(openingTime)), 5))) {
+          queue.waitTime = differenceInMinutes(
+            now,
+            addHours(parseISO(formatISO(openingTime)), 5)
+          );
+        }
+      }
+    }
   } else {
+    console.log('Else part ');
     estimatedTurnTime = openingTime.toISOString();
     const now = addHours(new Date(), 5);
     estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
 
-    // if (isAfter(now, addHours(parseISO(formatISO(openingTime)), 5)) && !queue) {
-    //   queue.waitTime = differenceInMinutes(
-    //     now,
-    //     addHours(parseISO(formatISO(openingTime)), 5)
-    //   );
+    // console.log(now,);
+    // console.log(
+    //   isAfter(now, addHours(parseISO(formatISO(openingTime)), 5)) && !queue
+    // );
 
-    //   console.log(queue.waitTime);
-    // }
+    if (isAfter(now, addHours(parseISO(formatISO(openingTime)), 5))) {
+      if (!queue || queue.upcomingTokenIds.length === 0)
+        queue.waitTime = differenceInMinutes(
+          now,
+          addHours(parseISO(formatISO(openingTime)), 5)
+        );
+    }
   }
 
   // Get last token number for the day
@@ -1224,20 +1370,35 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   });
   const tokenNumber = lastTokenOfDay ? queue.upcomingTokenIds.length + 1 : 1;
 
-  const requiredToken = {
+  console.log('estimatedTurnTime :', estimatedTurnTime);
+  // Create new token
+  const userToken = new UserToken({
     userId,
     tokenNumber,
-    estimatedTurnTime: estimatedTurnTime,
+    estimatedTurnTime: addMinutes(
+      addMinutes(estimatedTurnTime, queue.waitTime),
+      queue.offset
+    ),
     date: addHours(parseISO(requestedDate), 5),
     checkInOutStatus: 'pending',
-    isActive: isActive,
+    isActive: false,
     tokenGenerationTime: addHours(parseISO(today), 5),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
-  };
+  });
+
+  io.emit('tokenUpdate', {
+    data: {
+      offset: queue.offset,
+      waitTime: queue.waitTime,
+      exceptional: queue.exceptional,
+    },
+  });
+
+  queue.upcomingTokenIds.push(userToken._id);
 
   res
-    .status(200)
-    .json(new ApiResponse(200, requiredToken, 'Token generated successfully'));
+    .status(201)
+    .json(new ApiResponse(201, userToken, 'Token generated successfully'));
 });
 
 // @@ Get active tokens for table with pagination and filters

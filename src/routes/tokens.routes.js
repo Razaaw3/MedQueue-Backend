@@ -22,6 +22,7 @@ import {
   deleteToken,
   getTodayPatients,
   generateEmergencyToken,
+  getQueueDoctor,
 } from '../controllers/token.controller.js';
 import {checkOrCreateUser} from '../middleware/createOrCheckUser.middleware.js';
 
@@ -38,6 +39,7 @@ router.post(
 router.post('/generate-by-admin', verifyToken, isAdmin, generateTokenByAdmin);
 router.put('/cancel/:tokenId', verifyToken, cancelToken);
 router.get('/queue-status', verifyToken, getQueueStatus);
+router.get('/queue-status-doctor', verifyToken, getQueueDoctor);
 router.get('/history', verifyToken, getTokenHistory);
 router.get('/tokens-by-status', verifyToken, getTokensByStatus);
 router.post('/active', verifyToken, getActiveTokenByDate);
