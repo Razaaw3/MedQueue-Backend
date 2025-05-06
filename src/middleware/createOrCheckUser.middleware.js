@@ -23,7 +23,7 @@ export const checkOrCreateUser = async (req, res, next) => {
         name,
         phoneNumber,
         password: hashedPassword,
-        role: 'registered_user',
+        role: 'registeredUser',
         isVerified: true,
       });
 

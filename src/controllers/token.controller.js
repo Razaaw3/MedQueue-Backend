@@ -35,9 +35,10 @@ export const generateToken = asyncHandler(async (req, res) => {
   // get timezone
   // const zonalArea = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  const {date} = req.body;
+  const {date, type} = req.body;
   const socket = req.io;
-  const userId = req.user._id;
+  console.log(req);
+  const userId = type === 'admin' ? req.userId : req.user._id;
 
   if (!date) {
     throw new ApiError(400, 'Missing required field: date');

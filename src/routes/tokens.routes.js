@@ -36,7 +36,13 @@ router.post(
 
   generateEmergencyToken
 );
-router.post('/generate-by-admin', verifyToken, isAdmin, generateTokenByAdmin);
+router.post(
+  '/generate-by-admin',
+  verifyToken,
+  isAdmin,
+  checkOrCreateUser,
+  generateToken
+);
 router.put('/cancel/:tokenId', verifyToken, cancelToken);
 router.get('/queue-status', verifyToken, getQueueStatus);
 router.get('/queue-status-doctor', verifyToken, getQueueDoctor);

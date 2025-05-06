@@ -201,7 +201,7 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'password are required');
   }
 
-  console.log(email);
+  // console.log(email);
   if (email && !validateEmail(email)) {
     throw new ApiError(400, 'Invalid email format');
   }
@@ -214,7 +214,7 @@ const login = asyncHandler(async (req, res) => {
     user = await User.findOne({email}).select('+password'); // Make sure password is selected
   }
 
-  console.log(user);
+  // console.log(user);
 
   if (!user) {
     throw new ApiError(401, 'Invalid credentials');
@@ -228,12 +228,12 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(429, 'Too many failed login attempts. Try again later.');
   }
 
-  // Debugging: Log stored hash and input password
-  console.log('Stored hash:', user.password);
-  console.log('Input password:', password);
+  // // Debugging: Log stored hash and input password
+  // console.log('Stored hash:', user.password);
+  // console.log('Input password:', password);
 
   const isPasswordValid = await bcrypt.compare(password.trim(), user.password);
-  console.log('Password valid:', isPasswordValid);
+  // console.log('Password valid:', isPasswordValid);
 
   if (!isPasswordValid) {
     user.failedLoginAttempts += 1;
@@ -411,7 +411,7 @@ const verifyEmail = asyncHandler(async (req, res) => {
 const verifyOTPForEmailVerification = asyncHandler(async (req, res) => {
   const {email, otp, phoneNumber} = req.body;
 
-  console.log(phoneNumber);
+  // console.log(phoneNumber);
 
   if (!email || !otp) {
     throw new ApiError(400, 'Email and OTP are required');
@@ -436,7 +436,7 @@ const verifyOTPForEmailVerification = asyncHandler(async (req, res) => {
   user.otpExpiry = undefined;
   await user.save();
 
-  console.log(user);
+  // console.log(user);
   return res
     .status(200)
     .json(new ApiResponse(200, {email}, 'Email verified successfully'));
