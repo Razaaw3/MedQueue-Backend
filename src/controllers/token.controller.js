@@ -861,7 +861,9 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 export const getTokenHistory = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  const tokens = await UserToken.find({userId}).sort({tokenGenerationTime: -1});
+  const tokens = await UserToken.find({userId}).sort({
+    tokenGenerationTime: -1,
+  });
   if (!tokens || tokens.length === 0) {
     throw new ApiError(404, 'No tokens found for this user');
   }
@@ -1518,60 +1520,6 @@ export const getActiveTokensTable = async (req, res) => {
           error.message || 'Error fetching active tokens'
         )
       );
-  }
-};
-
-// @@ Update token status from table
-export const updateTokenStatusTable = async (req, res) => {
-  try {
-    const {tokenId} = req.params;
-    const {status} = req.body;
-
-    console.log('Received update request:', {tokenId, status});
-
-    if (!status || !['pending', 'onsite'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Invalid status provided. Only "pending" and "onsite" are allowed.',
-      });
-    }
-
-    const token = await UserToken.findById(tokenId);
-    console.log('Found token:', token);
-
-    if (!token) {
-      return res.status(404).json({
-        success: false,
-        message: 'Token not found',
-      });
-    }
-
-    token.checkInOutStatus = status;
-
-    if (status === 'onsite') {
-      token.tokenActivationTime = new Date();
-    }
-
-    await token.save();
-    console.log('Token updated successfully');
-
-    res.status(200).json({
-      success: true,
-      message: 'Token status updated successfully',
-      token: {
-        id: token._id,
-        status: token.checkInOutStatus,
-        tokenActivationTime: token.tokenActivationTime,
-      },
-    });
-  } catch (error) {
-    console.error('Error in updateTokenStatusTable:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error updating token status',
-      error: error.message,
-    });
   }
 };
 

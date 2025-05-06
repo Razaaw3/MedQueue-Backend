@@ -18,7 +18,7 @@ import {
   getUserToken,
   myTokenDetail,
   getActiveTokensTable,
-  updateTokenStatusTable,
+  // updateTokenStatusTable,
   deleteToken,
   getTodayPatients,
   generateEmergencyToken,
@@ -56,12 +56,12 @@ router.patch('/:tokenId/status', verifyToken, updateTokenStatus);
 // routes for active tokens table
 router.get('/active-table', verifyToken, isAdmin, getActiveTokensTable);
 router.get('/today-patients', verifyToken, isAdmin, getTodayPatients);
-router.patch(
-  '/:tokenId/status-table',
-  verifyToken,
-  isAdmin,
-  updateTokenStatusTable
-);
+// router.patch(
+//   "/:tokenId/status-table",
+//   verifyToken,
+//   isAdmin,
+//   updateTokenStatusTable
+// );
 router.delete('/delete-token/:tokenId', verifyToken, isAdmin, deleteToken);
 
 export default router;
