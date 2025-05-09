@@ -1830,7 +1830,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   // Create new token
   let userToken = {};
 
-  if (!queue) {
+  if (!queue || (!queue.activeTokenId && !queue.lastTokenId)) {
     userToken = new UserToken({
       userId,
       tokenNumber,
@@ -1875,7 +1875,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
       queue.waitTime = queue.waitTime + diff;
       currentlyActiveToken.save();
     } else if (!queue.activeTokenId && queue.lastTokenId) {
-      // console.log(queue.lastTokenId);
+      console.log('queue.lastTokenId');
       const diff = differenceInMinutes(
         currentTime,
         queue.lastTokenId.checkedOutTime
@@ -1898,7 +1898,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   queue.activeTokenId = userToken._id;
   queue.isEmergency = true;
 
-  console.log(queue);
+  console.log('User Token : ', userToken);
   await userToken.save();
   queue.upcomingTokenIds.push(userToken._id);
   await queue.save();
@@ -1916,4 +1916,14 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, userToken, 'Token generated successfully'));
+});
+
+export const userTokenDetail = asyncHandler(async (req, res) => {
+  const userId = req.params.tokenId;
+
+  const token = await UserToken.findById(userId).populate('userId');
+
+  res
+    .status(201)
+    .json(new ApiResponse(201, token, 'Token generated successfully'));
 });

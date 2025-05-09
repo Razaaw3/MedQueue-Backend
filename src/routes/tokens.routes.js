@@ -23,6 +23,7 @@ import {
   getTodayPatients,
   generateEmergencyToken,
   getQueueDoctor,
+  userTokenDetail,
 } from '../controllers/token.controller.js';
 import {checkOrCreateUser} from '../middleware/createOrCheckUser.middleware.js';
 
@@ -49,6 +50,7 @@ router.get('/queue-status-doctor', verifyToken, getQueueDoctor);
 router.get('/history', verifyToken, getTokenHistory);
 router.get('/tokens-by-status', verifyToken, getTokensByStatus);
 router.post('/active', verifyToken, getActiveTokenByDate);
+router.get('/token-detail/:tokenId', verifyToken, userTokenDetail);
 
 // Admin routes
 
