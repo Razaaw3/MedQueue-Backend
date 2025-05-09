@@ -1366,7 +1366,7 @@ export const getActiveTokensTable = async (req, res) => {
     const tokens = await UserToken.find(query)
       .populate({
         path: "userId",
-        select: "name email",
+        select: "name email phoneNumber",
         match: { _id: { $exists: true } },
       })
       .sort(sortConfig)
@@ -1381,7 +1381,8 @@ export const getActiveTokensTable = async (req, res) => {
         id: token._id,
         tokenNumber: token.tokenNumber,
         full_name: token.userId?.name || "Unknown User",
-        email: token.userId?.email || "No Email",
+        phoneNumber: token.userId?.phoneNumber || "No Phone",
+        priority: token.isEmergency ? "High" : "Normal",
         status: token.checkInOutStatus,
         tokenGenerationTime: token.tokenGenerationTime,
         estimatedTurnTime: token.estimatedTurnTime,
@@ -1514,7 +1515,7 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
     const tokens = await UserToken.find(query)
       .populate({
         path: "userId",
-        select: "name email",
+        select: "name email phoneNumber",
       })
       .sort({ [sortField]: sortOrder === "asc" ? 1 : -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
@@ -1529,7 +1530,7 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
         id: token._id,
         tokenNumber: token.tokenNumber,
         full_name: token.userId?.name || "Unknown User",
-        email: token.userId?.email || "No Email",
+        phoneNumber: token.userId?.phoneNumber || "No Phone",
         estimatedTurnTime: token.estimatedTurnTime,
         tokenGenerationTime: token.tokenGenerationTime,
         date: token.date,
@@ -1762,7 +1763,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
       queue.waitTime = queue.waitTime + diff;
       currentlyActiveToken.save();
     } else if (!queue.activeTokenId && queue.lastTokenId) {
-      console.log('queue.lastTokenId');
+      console.log("queue.lastTokenId");
       const diff = differenceInMinutes(
         currentTime,
         queue.lastTokenId.checkedOutTime
@@ -1785,7 +1786,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   queue.activeTokenId = userToken._id;
   queue.isEmergency = true;
 
-  console.log('User Token : ', userToken);
+  console.log("User Token : ", userToken);
   await userToken.save();
   queue.upcomingTokenIds.push(userToken._id);
   await queue.save();
@@ -1808,9 +1809,9 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
 export const userTokenDetail = asyncHandler(async (req, res) => {
   const userId = req.params.tokenId;
 
-  const token = await UserToken.findById(userId).populate('userId');
+  const token = await UserToken.findById(userId).populate("userId");
 
   res
     .status(201)
-    .json(new ApiResponse(201, token, 'Token generated successfully'));
+    .json(new ApiResponse(201, token, "Token generated successfully"));
 });
