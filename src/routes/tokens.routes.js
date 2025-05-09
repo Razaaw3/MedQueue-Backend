@@ -7,7 +7,6 @@ import {
 } from '../middleware/auth.middleware.js';
 import {
   generateToken,
-  generateTokenByAdmin,
   cancelToken,
   getQueueStatus,
   updateTokenStatus,
