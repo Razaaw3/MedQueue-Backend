@@ -21,7 +21,7 @@ const server = http.createServer(app);
 
 export const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: ['*'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['*'],
@@ -35,7 +35,7 @@ app.use(cookieParser());
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: ['*'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['*'],
@@ -58,10 +58,7 @@ app.use('/api/dashboard', dashboardRoutes);
 const PORT = process.env.PORT || 8000;
 
 // Only start the server if not in a Vercel environment
-if (process.env.VERCEL !== '1') {
-  server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
-}
 
-export default server;
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
