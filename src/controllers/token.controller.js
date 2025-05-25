@@ -108,16 +108,14 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   const tokenStartTime = addMinutes(openingTime, -15);
 
-  console.log('Generate Token : ', addHours(requestedDate, 5));
-
   // Find the queue for today
   let queue = await Queue.findOne({
-    date: addHours(requestedDate, 5),
+    date: getStartOfDay(requestedDate),
   }).populate('upcomingTokenIds');
 
   if (!queue) {
     queue = new Queue({
-      date: addHours(requestedDate, 5),
+      date: getStartOfDay(requestedDate),
       activeTokenId: null,
       upcomingTokenIds: [],
     });
@@ -132,11 +130,7 @@ export const generateToken = asyncHandler(async (req, res) => {
 
     if (lastTokenId) {
       const lastToken = await UserToken.findById(lastTokenId._id);
-
-      estimatedTurnTime = addMinutes(
-        lastToken.estimatedTurnTime,
-        10
-      ).toISOString();
+      estimatedTurnTime = addMinutes(lastToken.estimatedTurnTime, 10);
     } else {
       const activeToken = await UserToken.findOne({
         isActive: true,
@@ -146,49 +140,40 @@ export const generateToken = asyncHandler(async (req, res) => {
       if (activeToken && activeToken.tokenNumber === 1) {
         estimatedTurnTime = activeToken.tokenActivationTime;
       } else {
-        estimatedTurnTime = openingTime.toISOString();
+        estimatedTurnTime = openingTime;
         const now = getCurrentAppTime();
-        estimatedTurnTime = parseISO(estimatedTurnTime);
 
-        if (isAfter(now, parseISO(formatISO(openingTime)))) {
-          queue.waitTime = differenceInMinutes(
-            now,
-            parseISO(formatISO(openingTime))
-          );
+        if (isAfter(now, openingTime)) {
+          queue.waitTime = differenceInMinutes(now, openingTime);
         }
       }
     }
   } else {
-    console.log('Else part ');
-    estimatedTurnTime = openingTime.toISOString();
+    estimatedTurnTime = openingTime;
     const now = getCurrentAppTime();
-    estimatedTurnTime = parseISO(estimatedTurnTime);
 
-    if (isAfter(now, parseISO(formatISO(openingTime)))) {
-      if (!queue || queue.upcomingTokenIds.length === 0)
-        queue.waitTime = differenceInMinutes(
-          now,
-          parseISO(formatISO(openingTime))
-        );
+    if (isAfter(now, openingTime)) {
+      if (!queue || queue.upcomingTokenIds.length === 0) {
+        queue.waitTime = differenceInMinutes(now, openingTime);
+      }
     }
   }
 
   // Get last token number for the day
   const lastTokenOfDay = await UserToken.findOne({
-    date: addHours(requestedDate, 5),
+    date: getStartOfDay(requestedDate),
   });
   const tokenNumber = lastTokenOfDay ? queue.upcomingTokenIds.length + 1 : 1;
 
-  console.log('estimatedTurnTime :', estimatedTurnTime);
   // Create new token
   const userToken = new UserToken({
     userId,
     tokenNumber,
-    estimatedTurnTime: estimatedTurnTime,
-    date: addHours(requestedDate, 5),
+    estimatedTurnTime,
+    date: getStartOfDay(requestedDate),
     checkInOutStatus: 'pending',
     isActive: false,
-    tokenGenerationTime: addHours(today, 5),
+    tokenGenerationTime: getCurrentAppTime(),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
   });
 
@@ -1118,7 +1103,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
       .pop();
 
     if (lastTokenId) {
-      const lastToken = await UserToken.findById(lastTokenId._id);
+      const lastToken = await UserToken.findById(lastTokenId);
 
       estimatedTurnTime = addMinutes(
         lastToken.estimatedTurnTime,
