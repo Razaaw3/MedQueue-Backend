@@ -26,6 +26,7 @@ import {
   getHours,
   getMinutes,
   endOfDay,
+  addHours,
 } from 'date-fns';
 import PrivacySettings from '../models/PrivacySettings.model.js';
 
