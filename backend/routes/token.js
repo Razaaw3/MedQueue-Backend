@@ -20,7 +20,7 @@ router.post('/generate', isAuthenticated, async (req, res) => {
     // Check if user already has a token for this date
     const existingToken = await Token.findOne({
       user: userId,
-      date: new Date(date),
+      date: date,
     });
 
     if (existingToken) {

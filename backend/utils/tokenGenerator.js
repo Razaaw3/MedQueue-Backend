@@ -4,7 +4,7 @@ const generateToken = async (userId, date) => {
   try {
     // Get the count of tokens for the given date
     const tokenCount = await Token.countDocuments({
-      date: new Date(date),
+      date: date,
     });
 
     // Generate token number (1-based index)
@@ -13,7 +13,7 @@ const generateToken = async (userId, date) => {
     // Create new token
     const token = await Token.create({
       user: userId,
-      date: new Date(date),
+      date: date,
       tokenNumber,
       status: 'pending',
     });
