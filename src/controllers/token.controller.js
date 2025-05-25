@@ -221,7 +221,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     date: parseISO(requestedDate),
     checkInOutStatus: 'pending',
     isActive: false,
-    tokenGenerationTime: parseISO(today),
+    tokenGenerationTime: addHours(parseISO(today), 5),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
   });
 
@@ -1269,7 +1269,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     date: parseISO(requestedDate),
     checkInOutStatus: 'pending',
     isActive: false,
-    tokenGenerationTime: parseISO(today),
+    tokenGenerationTime: addHours(parseISO(today), 5),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
   });
 
@@ -1716,14 +1716,14 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
     userToken = new UserToken({
       userId,
       tokenNumber,
-      estimatedTurnTime: parseISO(today),
+      estimatedTurnTime: addHours(parseISO(today), 5),
       date: parseISO(requestedDate),
       checkInOutStatus: 'onsite',
       isActive: true,
-      tokenGenerationTime: parseISO(today),
+      tokenGenerationTime: addHours(parseISO(today), 5),
       estimatedEndTime: addMinutes(parseISO(today), 10),
       isEmergency: true,
-      tokenActivationTime: parseISO(today),
+      tokenActivationTime: addHours(parseISO(today), 5),
     });
     queue = new Queue({
       date: parseISO(requestedDate),
@@ -1735,14 +1735,14 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
       userToken = new UserToken({
         userId,
         tokenNumber,
-        estimatedTurnTime: parseISO(today),
+        estimatedTurnTime: addHours(parseISO(today), 5),
         date: parseISO(requestedDate),
         checkInOutStatus: 'onsite',
         isActive: true,
-        tokenGenerationTime: parseISO(today),
+        tokenGenerationTime: addHours(parseISO(today), 5),
         estimatedEndTime: addMinutes(parseISO(today), 10),
         isEmergency: true,
-        tokenActivationTime: parseISO(today),
+        tokenActivationTime: addHours(parseISO(today), 5),
       });
       const currentlyActiveToken = await UserToken.findOne({
         _id: queue.activeTokenId,
@@ -1770,10 +1770,10 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
         date: parseISO(requestedDate),
         checkInOutStatus: 'onsite',
         isActive: true,
-        tokenGenerationTime: parseISO(today),
+        tokenGenerationTime: addHours(parseISO(today), 5),
         estimatedEndTime: addMinutes(estimatedTurnTime, 10),
         isEmergency: true,
-        tokenActivationTime: parseISO(today),
+        tokenActivationTime: addHours(parseISO(today), 5),
       });
     }
   }
