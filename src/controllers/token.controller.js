@@ -1062,6 +1062,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   ).toISOString();
   const tokenStartTime = addMinutes(openingTime, -15);
 
+  console.log(parseISO(requestedDate));
   // Find the queue for today
   let queue = await Queue.findOne({
     date: parseISO(requestedDate),
