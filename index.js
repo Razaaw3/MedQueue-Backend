@@ -17,16 +17,24 @@ dotenv.config();
 
 const app = express();
 
-const server = http.createServer(app);
+// Only create the server if we're not in a Vercel environment
+const server = process.env.VERCEL === '1' ? app : http.createServer(app);
 
-export const io = new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    credentials: true,
-  },
-});
+// Only initialize Socket.IO if we're not in a Vercel environment
+export const io =
+  process.env.VERCEL === '1'
+    ? null
+    : new Server(server, {
+        cors: {
+          origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+          credentials: true,
+        },
+      });
 
-connectDB(io);
+// Only connect to DB if we're not in a Vercel environment
+if (process.env.VERCEL !== '1') {
+  connectDB(io);
+}
 
 app.use(express.json());
 app.use(cookieParser());
