@@ -16,16 +16,19 @@ import cors from 'cors';
 dotenv.config();
 
 const app = express();
-
 const server = http.createServer(app);
 
 export const io = new Server(server, {
   cors: {
-    origin: ['*'],
+    origin: '*',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['*'],
   },
+  transports: ['websocket', 'polling'],
+  path: '/socket.io/',
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 connectDB(io);
@@ -35,7 +38,7 @@ app.use(cookieParser());
 
 app.use(
   cors({
-    origin: ['*'],
+    origin: '*',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['*'],
@@ -62,3 +65,5 @@ const PORT = process.env.PORT || 8000;
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+export default server;
