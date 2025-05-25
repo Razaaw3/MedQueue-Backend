@@ -1040,7 +1040,7 @@ export const getUserToken = asyncHandler(async (req, res) => {
   const targetDate = new Date();
   const settings = await PrivacySettings.findOne({}).lean();
 
-  const date = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
+  const date = new Date(targetDate.setHours(0, 0, 0, 0));
 
   console.log(date);
   const userToken = await UserToken.findOne({
@@ -1238,13 +1238,18 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     console.log('Else part ');
     estimatedTurnTime = openingTime.toISOString();
     const now = addHours(new Date(), 5);
-    estimatedTurnTime = addHours(parseISO(estimatedTurnTime), 5);
+    estimatedTurnTime = estimatedTurnTime;
 
     // console.log(now,);
     // console.log(
     //   isAfter(now, addHours(parseISO(formatISO(openingTime)), 5)) && !queue
     // );
 
+    console.log(
+      'now, addHours(parseISO(formatISO(openingTime)), 5) : ',
+      now,
+      addHours(parseISO(formatISO(openingTime)), 5)
+    );
     if (isAfter(now, addHours(parseISO(formatISO(openingTime)), 5))) {
       if (!queue || queue.upcomingTokenIds.length === 0) {
         queue.waitTime = differenceInMinutes(
@@ -1261,7 +1266,11 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   });
   const tokenNumber = lastTokenOfDay ? queue.upcomingTokenIds.length + 1 : 1;
 
-  console.log('estimatedTurnTime :', estimatedTurnTime);
+  console.log(
+    'estimatedTurnTime :',
+    estimatedTurnTime,
+    addHours(parseISO(requestedDate), 5)
+  );
   // Create new token
   const userToken = new UserToken({
     userId,
