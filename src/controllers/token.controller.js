@@ -44,6 +44,17 @@ export const generateToken = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Missing required field: date');
   }
 
+  // Ensure date is properly parsed
+  let requestedDate;
+  try {
+    requestedDate = new Date(date);
+    if (isNaN(requestedDate.getTime())) {
+      throw new Error('Invalid date format');
+    }
+  } catch (error) {
+    throw new ApiError(400, 'Invalid date format provided');
+  }
+
   const clinic = await Clinic.findOne();
   if (!clinic) {
     throw new ApiError(
@@ -59,13 +70,13 @@ export const generateToken = asyncHandler(async (req, res) => {
     );
 
   // Convert provided date to application timezone
-  const requestedDate = toAppTimezone(date);
   const today = getCurrentAppTime();
+  const startOfRequestedDate = getStartOfDay(requestedDate);
 
   // Check if user already has an active token for the selected date
   const existingToken = await UserToken.findOne({
     userId,
-    date: getStartOfDay(requestedDate),
+    date: startOfRequestedDate,
   });
 
   if (existingToken) {
@@ -110,12 +121,12 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   // Find the queue for today
   let queue = await Queue.findOne({
-    date: getStartOfDay(requestedDate),
+    date: startOfRequestedDate,
   }).populate('upcomingTokenIds');
 
   if (!queue) {
     queue = new Queue({
-      date: getStartOfDay(requestedDate),
+      date: startOfRequestedDate,
       activeTokenId: null,
       upcomingTokenIds: [],
     });
@@ -161,7 +172,7 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   // Get last token number for the day
   const lastTokenOfDay = await UserToken.findOne({
-    date: getStartOfDay(requestedDate),
+    date: startOfRequestedDate,
   });
   const tokenNumber = lastTokenOfDay ? queue.upcomingTokenIds.length + 1 : 1;
 
@@ -170,7 +181,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     userId,
     tokenNumber,
     estimatedTurnTime,
-    date: getStartOfDay(requestedDate),
+    date: startOfRequestedDate,
     checkInOutStatus: 'pending',
     isActive: false,
     tokenGenerationTime: getCurrentAppTime(),
@@ -975,11 +986,8 @@ export const getUserToken = asyncHandler(async (req, res) => {
 });
 
 export const myTokenDetail = asyncHandler(async (req, res) => {
-  // get timezone
-  // const zonalArea = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-  const targetDate = new Date();
-  const date = new Date(targetDate.setHours(0, 0, 0, 0));
+  const targetDate = getCurrentAppTime();
+  const date = getStartOfDay(targetDate);
   const userId = req.user._id;
 
   if (!date) {
@@ -994,8 +1002,6 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     );
   }
 
-  // const settings = await PrivacySettings.findOne({}).lean();
-
   if (!clinic.tokenGenerationStatus)
     throw new ApiError(
       400,
@@ -1003,23 +1009,8 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     );
 
   // Convert provided date and today to start of the day (without time)
-  const requestedDate = formatISO(
-    new TZDate(date, 'Asia/Karachi').setHours(0, 0, 0, 0),
-    {
-      representation: 'complete',
-    }
-  );
-  let today = TZDate.tz('Asia/Karachi').toISOString();
-
-  // // //Uncomment the below feature if you are done with the development
-
-  // if (
-  //   !isSameDay(requestedDate, today, {
-  //     in: tz("Asia/Karachi"),
-  //   })
-  // ) {
-  //   throw new ApiError(400, "Cannot generate tokens for past or future dates.");
-  // }
+  const requestedDate = getStartOfDay(date);
+  const today = getCurrentAppTime();
 
   // Check if user already has an active token for the selected date
   const existingToken = await UserToken.findOne({
@@ -1032,13 +1023,11 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   }
 
   // Convert clinic opening and closing times to today's full DateTime
-  // const clinicOpenStoredTime = parse(
-  //   clinic.clinicOpeningTime,
-  //   'hh:mm a',
-  //   today
-  // );
-
-  const clinicDate = parse(clinic.clinicOpeningTime, 'hh:mm a', new Date());
+  const clinicDate = parse(
+    clinic.clinicOpeningTime,
+    'hh:mm a',
+    getCurrentAppTime()
+  );
   const openingHours = getHours(clinicDate);
   const openingMinutes = getMinutes(clinicDate);
 
@@ -1052,7 +1041,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   const clinicClosingTime = parse(
     clinic.clinicClosingTime,
     'hh:mm a',
-    new Date()
+    getCurrentAppTime()
   );
   const closingHours = getHours(clinicClosingTime);
   const closingMinutes = getMinutes(clinicClosingTime);
@@ -1064,32 +1053,19 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     milliseconds: 0,
   });
 
-  const openingTime = new TZDate(todayWithTime, 'Asia/Karachi');
-
-  const closingTime = new TZDate(
-    todayWithTimeClose,
-    'Asia/Karachi'
-  ).toISOString();
+  const openingTime = toAppTimezone(todayWithTime);
+  const closingTime = toAppTimezone(todayWithTimeClose);
 
   const tokenStartTime = addMinutes(openingTime, -15);
 
-  // // Uncomment this when you are done with the coding
-
-  // if (
-  //   isBefore(today, tokenStartTime.toISOString()) ||
-  //   isAfter(today, closingTime)
-  // ) {
-  //   throw new ApiError(400, 'Cannot generate token outside clinic hours.');
-  // }
-
   // Find the queue for today
   let queue = await Queue.findOne({
-    date: parseISO(requestedDate),
+    date: requestedDate,
   }).populate('upcomingTokenIds');
 
   if (!queue) {
     queue = new Queue({
-      date: parseISO(requestedDate),
+      date: requestedDate,
       activeTokenId: null,
       upcomingTokenIds: [],
     });
@@ -1103,12 +1079,8 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
       .pop();
 
     if (lastTokenId) {
-      const lastToken = await UserToken.findById(lastTokenId);
-
-      estimatedTurnTime = addMinutes(
-        lastToken.estimatedTurnTime,
-        10
-      ).toISOString();
+      const lastToken = await UserToken.findById(lastTokenId._id);
+      estimatedTurnTime = addMinutes(lastToken.estimatedTurnTime, 10);
     } else {
       const activeToken = await UserToken.findOne({
         isActive: true,
@@ -1118,67 +1090,40 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
       if (activeToken && activeToken.tokenNumber === 1) {
         estimatedTurnTime = activeToken.tokenActivationTime;
       } else {
-        estimatedTurnTime = openingTime.toISOString();
-        const now = new Date();
-        estimatedTurnTime = parseISO(estimatedTurnTime);
+        estimatedTurnTime = openingTime;
+        const now = getCurrentAppTime();
 
-        if (isAfter(now, parseISO(formatISO(openingTime)))) {
-          queue.waitTime = differenceInMinutes(
-            now,
-            parseISO(formatISO(openingTime))
-          );
+        if (isAfter(now, openingTime)) {
+          queue.waitTime = differenceInMinutes(now, openingTime);
         }
       }
     }
   } else {
-    console.log('Else part ');
-    estimatedTurnTime = openingTime.toISOString();
-    const now = new Date();
-    estimatedTurnTime = estimatedTurnTime;
+    estimatedTurnTime = openingTime;
+    const now = getCurrentAppTime();
 
-    // console.log(now,);
-    // console.log(
-    //   isAfter(now, parseISO(formatISO(openingTime))) && !queue
-    // );
-
-    console.log(
-      'now, parseISO(formatISO(openingTime)) : ',
-      now,
-      parseISO(formatISO(openingTime))
-    );
-    if (isAfter(now, parseISO(formatISO(openingTime)))) {
+    if (isAfter(now, openingTime)) {
       if (!queue || queue.upcomingTokenIds.length === 0) {
-        queue.waitTime = differenceInMinutes(
-          now,
-          parseISO(formatISO(openingTime))
-        );
+        queue.waitTime = differenceInMinutes(now, openingTime);
       }
     }
   }
 
   // Get last token number for the day
   const lastTokenOfDay = await UserToken.findOne({
-    date: parseISO(requestedDate),
+    date: requestedDate,
   });
   const tokenNumber = lastTokenOfDay ? queue.upcomingTokenIds.length + 1 : 1;
 
-  console.log(
-    'estimatedTurnTime :',
-    estimatedTurnTime,
-    parseISO(requestedDate)
-  );
   // Create new token
   const userToken = new UserToken({
     userId,
     tokenNumber,
-    estimatedTurnTime: addMinutes(
-      addMinutes(estimatedTurnTime, queue.waitTime),
-      queue.offset
-    ),
-    date: parseISO(requestedDate),
+    estimatedTurnTime,
+    date: requestedDate,
     checkInOutStatus: 'pending',
     isActive: false,
-    tokenGenerationTime: addHours(parseISO(today), 5),
+    tokenGenerationTime: getCurrentAppTime(),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
   });
 
