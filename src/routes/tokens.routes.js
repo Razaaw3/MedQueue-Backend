@@ -23,6 +23,8 @@ import {
   generateEmergencyToken,
   getQueueDoctor,
   userTokenDetail,
+  getQRCode,
+  scanQRCode,
 } from '../controllers/token.controller.js';
 import {checkOrCreateUser} from '../middleware/createOrCheckUser.middleware.js';
 
@@ -70,5 +72,9 @@ router.get('/today-patients', verifyToken, isAdmin, getTodayPatients);
 //   updateTokenStatusTable
 // );
 router.delete('/delete-token/:tokenId', verifyToken, isAdmin, deleteToken);
+
+// QR code routes
+router.get('/qr-code', verifyToken, isAdmin, getQRCode);
+router.post('/scan-qr/:queueId', verifyToken, scanQRCode);
 
 export default router;

@@ -743,6 +743,58 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
   res.json(new ApiResponse(200, token, 'Token status updated successfully'));
 });
 
+// @@ Get QR Code for admin
+export const getQRCode = asyncHandler(async (req, res) => {
+  const targetDate = new Date();
+  const startOfDay = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
+  const endOfDay = addHours(new Date(targetDate.setHours(23, 59, 59, 999)), 5);
+
+  const queue = await Queue.findOne({
+    date: {$gte: startOfDay, $lt: endOfDay},
+  });
+
+  if (!queue) {
+    throw new ApiError(404, 'No queue found for today');
+  }
+
+  // Generate a unique QR code URL that uses the custom scheme for deep linking
+  const qrCodeUrl = `medqueue://scan-qr/${queue._id}`;
+
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, {qrCodeUrl}, 'QR code URL generated successfully')
+    );
+});
+
+// @@ Scan QR Code and update token status
+export const scanQRCode = asyncHandler(async (req, res) => {
+  const {queueId} = req.params;
+  const userId = req.user._id;
+
+  const queue = await Queue.findById(queueId);
+  if (!queue) {
+    return res.status(404).json({success: false, message: 'Queue not found'});
+  }
+
+  // Find the user's active token for today
+  const token = await UserToken.findOne({
+    userId,
+    date: queue.date,
+    checkInOutStatus: 'pending',
+  });
+
+  if (!token) {
+    return res.status(200).json({
+      success: false,
+      message: 'No pending token found for this user in the queue',
+    });
+  }
+
+  // Only validate, do not update token or queue
+  return res.status(200).json({success: true});
+});
+
 // @@ Get token history
 export const getTokenHistory = asyncHandler(async (req, res) => {
   const userId = req.user._id;
@@ -1207,7 +1259,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
       .pop();
 
     if (lastTokenId) {
-      const lastToken = await UserToken.findById(lastTokenId._id);
+      const lastToken = await UserToken.findById(lastTokenId);
 
       estimatedTurnTime = addMinutes(
         lastToken.estimatedTurnTime,
