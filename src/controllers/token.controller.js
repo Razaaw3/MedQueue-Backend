@@ -1233,7 +1233,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     console.log('lastTokenId : ', lastTokenId);
 
     if (lastTokenId) {
-      const lastToken = await UserToken.findById(lastTokenId);
+      const lastToken = await UserToken.findById(lastTokenId._id);
 
       estimatedTurnTime = addMinutes(
         lastToken.estimatedTurnTime,
