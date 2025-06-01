@@ -73,7 +73,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     );
 
   // Convert provided date to application timezone
-  const today = getCurrentAppTime();
+  const today = addHours(getCurrentAppTime(), 5);
   console.log('today:', today);
   const startOfRequestedDate = getStartOfDay(requestedDate);
   console.log('startOfRequestedDate:', startOfRequestedDate);
@@ -167,7 +167,7 @@ export const generateToken = asyncHandler(async (req, res) => {
       } else {
         estimatedTurnTime = openingTime;
         console.log('estimatedTurnTime (from openingTime):', estimatedTurnTime);
-        const now = getCurrentAppTime();
+        const now = addHours(getCurrentAppTime(), 5);
         console.log('now:', now);
         if (isAfter(now, openingTime)) {
           queue.waitTime = differenceInMinutes(now, openingTime);
@@ -177,7 +177,7 @@ export const generateToken = asyncHandler(async (req, res) => {
   } else {
     estimatedTurnTime = openingTime;
     console.log('estimatedTurnTime (no upcomingTokenIds):', estimatedTurnTime);
-    const now = getCurrentAppTime();
+    const now = addHours(getCurrentAppTime(), 5);
     console.log('now:', now);
     if (isAfter(now, openingTime)) {
       if (!queue || queue.upcomingTokenIds.length === 0) {
@@ -1247,7 +1247,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
         estimatedTurnTime = activeToken.tokenActivationTime;
       } else {
         estimatedTurnTime = openingTime;
-        const now = getCurrentAppTime();
+        const now = addHours(getCurrentAppTime(), 5);
 
         if (isAfter(now, openingTime)) {
           queue.waitTime = differenceInMinutes(now, openingTime);
@@ -1256,7 +1256,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     }
   } else {
     estimatedTurnTime = openingTime;
-    const now = getCurrentAppTime();
+    const now = addHours(getCurrentAppTime(), 5);
 
     if (isAfter(now, openingTime)) {
       if (!queue || queue.upcomingTokenIds.length === 0) {
