@@ -1239,6 +1239,8 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
         lastToken.estimatedTurnTime,
         10
       ).toISOString();
+
+      console.log('Estimated turn time : ', estimatedTurnTime);
     } else {
       console.log('Else condition is true');
       const activeToken = await UserToken.findOne({
@@ -1285,7 +1287,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     date: requestedDate,
     checkInOutStatus: 'pending',
     isActive: false,
-    tokenGenerationTime: getCurrentAppTime(),
+    tokenGenerationTime: addHours(getCurrentAppTime(), 5),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
   });
 
