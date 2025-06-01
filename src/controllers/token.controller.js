@@ -49,7 +49,7 @@ export const generateToken = asyncHandler(async (req, res) => {
   // Ensure date is properly parsed
   let requestedDate;
   try {
-    requestedDate = new Date(date);
+    requestedDate = addHours(new Date(date), 5);
     if (isNaN(requestedDate.getTime())) {
       throw new Error('Invalid date format');
     }
