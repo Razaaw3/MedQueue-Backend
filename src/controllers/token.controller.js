@@ -1226,13 +1226,13 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   // Determine estimated turn time
   let estimatedTurnTime;
   if (queue.upcomingTokenIds.length > 0) {
+    console.log('Queue upcomingTokenIds length is greater than 0');
     const lastTokenId = queue.upcomingTokenIds
       .filter((item) => item.isEmergency === false)
       .pop();
 
-    console.log('lastTokenId : ', lastTokenId);
-
-    if (lastTokenId) {
+    if (lastTokenId?._id) {
+      console.log('If condition is true');
       const lastToken = await UserToken.findById(lastTokenId._id);
 
       estimatedTurnTime = addMinutes(
@@ -1240,14 +1240,18 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
         10
       ).toISOString();
     } else {
+      console.log('Else condition is true');
       const activeToken = await UserToken.findOne({
         isActive: true,
         isEmergency: true,
       }).lean();
 
       if (activeToken && activeToken.tokenNumber === 1) {
+        console.log('Active token is true');
+
         estimatedTurnTime = activeToken.tokenActivationTime;
       } else {
+        console.log('Active token is false');
         estimatedTurnTime = openingTime;
         const now = addHours(getCurrentAppTime(), 5);
 
