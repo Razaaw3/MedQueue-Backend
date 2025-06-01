@@ -332,8 +332,8 @@ export const cancelToken = asyncHandler(async (req, res) => {
 export const getQueueStatus = asyncHandler(async (req, res) => {
   console.log('getQueueStatus ki api ');
   const targetDate = getCurrentAppTime();
-  const startOfDay = getStartOfDay(targetDate);
-  const endOfDay = getEndOfDay(targetDate);
+  const startOfDay = addHours(getStartOfDay(targetDate), 5);
+  const endOfDay = addHours(getEndOfDay(targetDate), 5);
 
   console.log('targetDate : ', targetDate);
   console.log('startOfDay : ', startOfDay);
@@ -357,8 +357,8 @@ export const getQueueStatus = asyncHandler(async (req, res) => {
 export const getQueueDoctor = asyncHandler(async (req, res) => {
   console.log('getQueueDoctor ki api ');
   const targetDate = getCurrentAppTime();
-  const startOfDay = getStartOfDay(targetDate);
-  const endOfDay = getEndOfDay(targetDate);
+  const startOfDay = addHours(getStartOfDay(targetDate), 5);
+  const endOfDay = addHours(getEndOfDay(targetDate), 5);
 
   console.log('targetDate : ', targetDate);
   console.log('startOfDay : ', startOfDay);
@@ -1058,7 +1058,6 @@ export const getUserToken = asyncHandler(async (req, res) => {
   const settings = await PrivacySettings.findOne({}).lean();
 
   const date = new Date(targetDate.setHours(0, 0, 0, 0));
-  console.log('date : ', date);
 
   const userToken = await UserToken.findOne({
     userId: _id,
