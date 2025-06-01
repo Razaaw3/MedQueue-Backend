@@ -1230,6 +1230,8 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
       .filter((item) => item.isEmergency === false)
       .pop();
 
+    console.log('lastTokenId : ', lastTokenId);
+
     if (lastTokenId) {
       const lastToken = await UserToken.findById(lastTokenId);
 
