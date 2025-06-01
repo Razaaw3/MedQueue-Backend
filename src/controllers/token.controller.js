@@ -75,7 +75,7 @@ export const generateToken = asyncHandler(async (req, res) => {
   // Convert provided date to application timezone
   const today = addHours(getCurrentAppTime(), 5);
   console.log('today:', today);
-  const startOfRequestedDate = getStartOfDay(requestedDate);
+  const startOfRequestedDate = addHours(getStartOfDay(requestedDate), 5);
   console.log('startOfRequestedDate:', startOfRequestedDate);
 
   // Check if user already has an active token for the selected date
@@ -201,7 +201,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     date: startOfRequestedDate,
     checkInOutStatus: 'pending',
     isActive: false,
-    tokenGenerationTime: getCurrentAppTime(),
+    tokenGenerationTime: addHours(getCurrentAppTime(), 5),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
   });
   console.log('userToken object:', {
@@ -211,7 +211,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     date: startOfRequestedDate,
     checkInOutStatus: 'pending',
     isActive: false,
-    tokenGenerationTime: getCurrentAppTime(),
+    tokenGenerationTime: addHours(getCurrentAppTime(), 5),
     estimatedEndTime: addMinutes(estimatedTurnTime, 10),
   });
 
