@@ -1038,8 +1038,13 @@ export const getUserToken = asyncHandler(async (req, res) => {
 });
 
 export const myTokenDetail = asyncHandler(async (req, res) => {
-  const targetDate = getCurrentAppTime();
-  const date = getStartOfDay(targetDate);
+  // get timezone
+  // const zonalArea = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const targetDate = new Date();
+  console.log('Targetted date with new Date() : ', targetDate);
+  const date = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
+  console.log('Date after adding 5 hours created with new Date() : ', date);
   const userId = req.user._id;
 
   if (!date) {
@@ -1061,8 +1066,28 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     );
 
   // Convert provided date and today to start of the day (without time)
-  const requestedDate = getStartOfDay(date);
-  const today = getCurrentAppTime();
+  const requestedDate = formatISO(
+    addHours(new TZDate(date, 'Asia/Karachi'), 5).setHours(0, 0, 0, 0),
+    {
+      representation: 'complete',
+    }
+  );
+  console.log(
+    'Requested date with TZDate to ISOString using formatISO: ',
+    requestedDate
+  );
+  let today = TZDate.tz('Asia/Karachi').toISOString();
+  console.log("Today's date with TZDate to ISOString : ", today);
+
+  // // //Uncomment the below feature if you are done with the development
+
+  // if (
+  //   !isSameDay(requestedDate, today, {
+  //     in: tz("Asia/Karachi"),
+  //   })
+  // ) {
+  //   throw new ApiError(400, "Cannot generate tokens for past or future dates.");
+  // }
 
   // Check if user already has an active token for the selected date
   const existingToken = await UserToken.findOne({
@@ -1080,6 +1105,8 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     'hh:mm a',
     getCurrentAppTime()
   );
+
+  console.log('Clinic date with parse : ', clinicDate);
   const openingHours = getHours(clinicDate);
   const openingMinutes = getMinutes(clinicDate);
 
@@ -1095,6 +1122,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     'hh:mm a',
     getCurrentAppTime()
   );
+  console.log('Clinic closing time with parse : ', clinicClosingTime);
   const closingHours = getHours(clinicClosingTime);
   const closingMinutes = getMinutes(clinicClosingTime);
 
@@ -1105,11 +1133,26 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     milliseconds: 0,
   });
 
-  const openingTime = toAppTimezone(todayWithTime);
-  const closingTime = toAppTimezone(todayWithTimeClose);
+  const openingTime = new TZDate(todayWithTime, 'Asia/Karachi');
+  console.log('Opening time with TZDate : ', openingTime);
 
+  const closingTime = new TZDate(
+    todayWithTimeClose,
+    'Asia/Karachi'
+  ).toISOString();
+  console.log('Closing time with TZDate : ', closingTime);
   const tokenStartTime = addMinutes(openingTime, -15);
 
+  // // Uncomment this when you are done with the coding
+
+  // if (
+  //   isBefore(today, tokenStartTime.toISOString()) ||
+  //   isAfter(today, closingTime)
+  // ) {
+  //   throw new ApiError(400, 'Cannot generate token outside clinic hours.');
+  // }
+
+  console.log('Requested date with parseISO : ', parseISO(requestedDate));
   // Find the queue for today
   let queue = await Queue.findOne({
     date: requestedDate,
