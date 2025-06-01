@@ -22,6 +22,7 @@ import {
   setHours,
   getHours,
   getMinutes,
+  startOfDay,
 } from 'date-fns';
 import PrivacySettings from '../models/PrivacySettings.model.js';
 import {
@@ -37,6 +38,7 @@ import {TZDate} from '@date-fns/tz';
 
 // @@ Generate token
 export const generateToken = asyncHandler(async (req, res) => {
+  console.log('Generate token ki api ');
   const {date, type = 'user'} = req.body;
   const userId = type === 'admin' ? req.userId : req.user._id;
 
@@ -54,6 +56,7 @@ export const generateToken = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(400, 'Invalid date format provided');
   }
+  console.log('requestedDate:', requestedDate);
 
   const clinic = await Clinic.findOne();
   if (!clinic) {
@@ -71,7 +74,9 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   // Convert provided date to application timezone
   const today = getCurrentAppTime();
+  console.log('today:', today);
   const startOfRequestedDate = getStartOfDay(requestedDate);
+  console.log('startOfRequestedDate:', startOfRequestedDate);
 
   // Check if user already has an active token for the selected date
   const existingToken = await UserToken.findOne({
@@ -89,6 +94,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     'hh:mm a',
     getCurrentAppTime()
   );
+  console.log('clinicDate:', clinicDate);
   const openingHours = getHours(clinicDate);
   const openingMinutes = getMinutes(clinicDate);
 
@@ -98,12 +104,14 @@ export const generateToken = asyncHandler(async (req, res) => {
     seconds: 0,
     milliseconds: 0,
   });
+  console.log('todayWithTime:', todayWithTime);
 
   const clinicClosingTime = parse(
     clinic.clinicClosingTime,
     'hh:mm a',
     getCurrentAppTime()
   );
+  console.log('clinicClosingTime:', clinicClosingTime);
   const closingHours = getHours(clinicClosingTime);
   const closingMinutes = getMinutes(clinicClosingTime);
 
@@ -113,11 +121,15 @@ export const generateToken = asyncHandler(async (req, res) => {
     seconds: 0,
     milliseconds: 0,
   });
+  console.log('todayWithTimeClose:', todayWithTimeClose);
 
   const openingTime = toAppTimezone(todayWithTime);
+  console.log('openingTime:', openingTime);
   const closingTime = toAppTimezone(todayWithTimeClose);
+  console.log('closingTime:', closingTime);
 
   const tokenStartTime = addMinutes(openingTime, -15);
+  console.log('tokenStartTime:', tokenStartTime);
 
   // Find the queue for today
   let queue = await Queue.findOne({
@@ -142,6 +154,7 @@ export const generateToken = asyncHandler(async (req, res) => {
     if (lastTokenId) {
       const lastToken = await UserToken.findById(lastTokenId._id);
       estimatedTurnTime = addMinutes(lastToken.estimatedTurnTime, 10);
+      console.log('estimatedTurnTime (from lastToken):', estimatedTurnTime);
     } else {
       const activeToken = await UserToken.findOne({
         isActive: true,
@@ -150,10 +163,12 @@ export const generateToken = asyncHandler(async (req, res) => {
 
       if (activeToken && activeToken.tokenNumber === 1) {
         estimatedTurnTime = activeToken.tokenActivationTime;
+        console.log('estimatedTurnTime (from activeToken):', estimatedTurnTime);
       } else {
         estimatedTurnTime = openingTime;
+        console.log('estimatedTurnTime (from openingTime):', estimatedTurnTime);
         const now = getCurrentAppTime();
-
+        console.log('now:', now);
         if (isAfter(now, openingTime)) {
           queue.waitTime = differenceInMinutes(now, openingTime);
         }
@@ -161,8 +176,9 @@ export const generateToken = asyncHandler(async (req, res) => {
     }
   } else {
     estimatedTurnTime = openingTime;
+    console.log('estimatedTurnTime (no upcomingTokenIds):', estimatedTurnTime);
     const now = getCurrentAppTime();
-
+    console.log('now:', now);
     if (isAfter(now, openingTime)) {
       if (!queue || queue.upcomingTokenIds.length === 0) {
         queue.waitTime = differenceInMinutes(now, openingTime);
@@ -174,10 +190,21 @@ export const generateToken = asyncHandler(async (req, res) => {
   const lastTokenOfDay = await UserToken.findOne({
     date: startOfRequestedDate,
   });
+  console.log('lastTokenOfDay:', lastTokenOfDay);
   const tokenNumber = lastTokenOfDay ? queue.upcomingTokenIds.length + 1 : 1;
 
   // Create new token
   const userToken = new UserToken({
+    userId,
+    tokenNumber,
+    estimatedTurnTime,
+    date: startOfRequestedDate,
+    checkInOutStatus: 'pending',
+    isActive: false,
+    tokenGenerationTime: getCurrentAppTime(),
+    estimatedEndTime: addMinutes(estimatedTurnTime, 10),
+  });
+  console.log('userToken object:', {
     userId,
     tokenNumber,
     estimatedTurnTime,
@@ -303,9 +330,14 @@ export const cancelToken = asyncHandler(async (req, res) => {
 
 // @@ Get queue status
 export const getQueueStatus = asyncHandler(async (req, res) => {
+  console.log('getQueueStatus ki api ');
   const targetDate = getCurrentAppTime();
   const startOfDay = getStartOfDay(targetDate);
   const endOfDay = getEndOfDay(targetDate);
+
+  console.log('targetDate : ', targetDate);
+  console.log('startOfDay : ', startOfDay);
+  console.log('endOfDay : ', endOfDay);
 
   const allTokens = await Queue.findOne({
     date: {$gte: startOfDay, $lt: endOfDay},
@@ -323,9 +355,14 @@ export const getQueueStatus = asyncHandler(async (req, res) => {
 });
 
 export const getQueueDoctor = asyncHandler(async (req, res) => {
+  console.log('getQueueDoctor ki api ');
   const targetDate = getCurrentAppTime();
   const startOfDay = getStartOfDay(targetDate);
   const endOfDay = getEndOfDay(targetDate);
+
+  console.log('targetDate : ', targetDate);
+  console.log('startOfDay : ', startOfDay);
+  console.log('endOfDay : ', endOfDay);
 
   const allTokens = await Queue.findOne({
     date: {$gte: startOfDay, $lt: endOfDay},
@@ -350,6 +387,7 @@ export const getQueueDoctor = asyncHandler(async (req, res) => {
 
 // @@ Update token status
 export const updateTokenStatus = asyncHandler(async (req, res) => {
+  console.log('updateTokenStatus ki api ');
   const {tokenId} = req.params;
   const {checkInOutStatus} = req.body;
 
@@ -364,6 +402,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
   let queue = doctorsQueue;
 
   const currentTime = getCurrentAppTime();
+  console.log('currentTime : ', currentTime);
 
   switch (checkInOutStatus) {
     case 'pending':
@@ -384,6 +423,7 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
       token.isActive = false;
       token.checkInOutStatus = checkInOutStatus;
       token.checkedOutTime = getCurrentAppTime();
+      console.log('token.checkedOutTime : ', token.checkedOutTime);
 
       const firstTrueIndex = queue.upcomingTokenIds.findIndex(
         (item) =>
@@ -423,6 +463,10 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 
         queue.activeTokenId = nextToken._id;
         nextToken.tokenActivationTime = currentTime;
+        console.log(
+          'nextToken.tokenActivationTime : ',
+          nextToken.tokenActivationTime
+        );
         nextToken.isActive = true;
 
         io.emit('tokenUpdate', {
@@ -609,10 +653,9 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
             'hh:mm a',
             getCurrentAppTime()
           );
+          console.log('parsedDate : ', parsedDate);
           queue.activeTokenId = token._id;
           token.isActive = true;
-
-          console.log('parsedDate ');
 
           const waitTime = differenceInMinutes(currentTime, parsedDate);
           queue.waitTime = waitTime;
@@ -681,9 +724,14 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 
 // @@ Get QR Code for admin
 export const getQRCode = asyncHandler(async (req, res) => {
+  console.log('getQRCode ki api ');
   const targetDate = new Date();
   const startOfDay = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
   const endOfDay = addHours(new Date(targetDate.setHours(23, 59, 59, 999)), 5);
+
+  console.log('targetDate : ', targetDate);
+  console.log('startOfDay : ', startOfDay);
+  console.log('endOfDay : ', endOfDay);
 
   const queue = await Queue.findOne({
     date: {$gte: startOfDay, $lt: endOfDay},
@@ -767,6 +815,7 @@ export const getTokenHistory = asyncHandler(async (req, res) => {
 
 // Get all tokens for a specific date
 export const getAllTokensByDate = asyncHandler(async (req, res) => {
+  console.log('getAllTokensByDate ki api ');
   const {date} = req.query;
 
   if (!date) {
@@ -782,6 +831,10 @@ export const getAllTokensByDate = asyncHandler(async (req, res) => {
   const parsedDate = parseDate(date);
   const dayStart = startOfDay(parsedDate);
   const dayEnd = addHours(dayStart, 24);
+
+  console.log('dayStart : ', dayStart);
+  console.log('dayEnd : ', dayEnd);
+  console.log('parsedDate : ', parsedDate);
 
   const tokens = await UserToken.find({
     date: {$gte: dayStart, $lt: dayEnd},
@@ -998,14 +1051,15 @@ export const getTokensByStatus = asyncHandler(async (req, res) => {
 });
 
 export const getUserToken = asyncHandler(async (req, res) => {
+  console.log('getUserToken ki api ');
   const _id = req.user._id;
   const socket = req.io;
   const targetDate = new Date();
   const settings = await PrivacySettings.findOne({}).lean();
 
   const date = new Date(targetDate.setHours(0, 0, 0, 0));
+  console.log('date : ', date);
 
-  console.log(date);
   const userToken = await UserToken.findOne({
     userId: _id,
     date,
@@ -1414,17 +1468,20 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
   } = req.query;
 
   try {
+    console.log('getTodayPatients ki api ');
     const today = new Date();
     const startOfToday = new Date(
       today.getFullYear(),
       today.getMonth(),
       today.getDate()
     );
+    console.log('startOfToday : ', startOfToday);
     const endOfToday = new Date(
       today.getFullYear(),
       today.getMonth(),
       today.getDate() + 1
     );
+    console.log('endOfToday : ', endOfToday);
 
     const startTime = startOfToday;
     const endTime = endOfToday;
@@ -1523,9 +1580,11 @@ export const getTodayPatients = asyncHandler(async (req, res) => {
 
 // @@ Get generateEmergencyToken's patients
 export const generateEmergencyToken = asyncHandler(async (req, res) => {
+  console.log('generateEmergencyToken ki api ');
   const {date} = req.body;
   const userId = req.userId;
   const currentTime = getCurrentAppTime();
+  console.log('currentTime : ', currentTime);
 
   if (!date) {
     throw new ApiError(400, 'Missing required field: date');
@@ -1541,7 +1600,9 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
 
   // Convert provided date to application timezone
   const requestedDate = toAppTimezone(date);
+  console.log('requestedDate : ', requestedDate);
   const today = getCurrentAppTime();
+  console.log('today : ', today);
 
   // Check if user already has an active token for the selected date
   const existingToken = await UserToken.findOne({
@@ -1559,6 +1620,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
     'hh:mm a',
     getCurrentAppTime()
   );
+  console.log('clinicDate : ', clinicDate);
   const openingHours = getHours(clinicDate);
   const openingMinutes = getMinutes(clinicDate);
 
@@ -1569,11 +1631,16 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
     milliseconds: 0,
   });
 
+  console.log('todayWithTime : ', todayWithTime);
+
   const clinicClosingTime = parse(
     clinic.clinicClosingTime,
     'hh:mm a',
     getCurrentAppTime()
   );
+
+  console.log('clinicClosingTime : ', clinicClosingTime);
+
   const closingHours = getHours(clinicClosingTime);
   const closingMinutes = getMinutes(clinicClosingTime);
 
@@ -1585,9 +1652,12 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   });
 
   const openingTime = toAppTimezone(todayWithTime);
+  console.log('openingTime : ', openingTime);
   const closingTime = toAppTimezone(todayWithTimeClose);
+  console.log('closingTime : ', closingTime);
 
   const tokenStartTime = addMinutes(openingTime, -15);
+  console.log('tokenStartTime : ', tokenStartTime);
 
   // Find the queue for today
   let queue = await Queue.findOne({
@@ -1632,6 +1702,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
       isEmergency: true,
       tokenActivationTime: addHours(requestedDate, 5),
     });
+    console.log('userToken : ', userToken);
     queue = new Queue({
       date: addHours(requestedDate, 5),
       activeTokenId: userToken._id,
@@ -1651,6 +1722,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
         isEmergency: true,
         tokenActivationTime: addHours(requestedDate, 5),
       });
+      console.log('userToken : ', userToken);
       const currentlyActiveToken = await UserToken.findOne({
         _id: queue.activeTokenId,
       });
@@ -1682,6 +1754,7 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
         isEmergency: true,
         tokenActivationTime: addHours(requestedDate, 5),
       });
+      console.log('userToken : ', userToken);
     }
   }
   queue.activeTokenId = userToken._id;
