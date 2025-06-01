@@ -1096,7 +1096,7 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
 
   const targetDate = new Date();
   console.log('Targetted date with new Date() : ', targetDate);
-  const date = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
+  const date = new Date(targetDate.setHours(0, 0, 0, 0));
   console.log('Date after adding 5 hours created with new Date() : ', date);
   const userId = req.user._id;
 
@@ -1119,11 +1119,14 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     );
 
   // Convert provided date and today to start of the day (without time)
-  const requestedDate = formatISO(
-    addHours(new TZDate(date, 'Asia/Karachi'), 5).setHours(0, 0, 0, 0),
-    {
-      representation: 'complete',
-    }
+  const requestedDate = addHours(
+    formatISO(
+      addHours(new TZDate(date, 'Asia/Karachi'), 5).setHours(0, 0, 0, 0),
+      {
+        representation: 'complete',
+      }
+    ),
+    5
   );
   console.log(
     'Requested date with TZDate to ISOString using formatISO: ',
