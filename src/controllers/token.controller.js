@@ -1199,6 +1199,8 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   console.log('Closing time with TZDate : ', closingTime);
   const tokenStartTime = addMinutes(openingTime, -15);
 
+  console.log(getCurrentAppTime());
+
   // // Uncomment this when you are done with the coding
 
   // if (
@@ -1208,7 +1210,6 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   //   throw new ApiError(400, 'Cannot generate token outside clinic hours.');
   // }
 
-  console.log('Requested date with parseISO : ', parseISO(requestedDate));
   // Find the queue for today
   let queue = await Queue.findOne({
     date: requestedDate,
