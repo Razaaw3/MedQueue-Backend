@@ -1192,10 +1192,10 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   const openingTime = new TZDate(todayWithTime, 'Asia/Karachi');
   console.log('Opening time with TZDate : ', openingTime);
 
-  const closingTime = new TZDate(
-    todayWithTimeClose,
-    'Asia/Karachi'
-  ).toISOString();
+  const closingTime = addHours(
+    new TZDate(todayWithTimeClose, 'Asia/Karachi').toISOString(),
+    -5
+  );
   console.log('Closing time with TZDate : ', closingTime);
   const tokenStartTime = addMinutes(openingTime, -15);
 
