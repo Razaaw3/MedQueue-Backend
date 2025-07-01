@@ -1,35 +1,35 @@
-import mongoose from 'mongoose';
-import bcrypt from 'bcryptjs';
+import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 
 const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, 'Name is required'],
+      required: [true, "Name is required"],
       trim: true,
       index: true,
     },
     role: {
       type: String,
-      enum: ['admin', 'registeredUser', 'doctor'],
-      default: 'registeredUser',
+      enum: ["admin", "registeredUser", "doctor"],
+      default: "registeredUser",
       required: true,
     },
     email: {
       type: String,
       // required: [true, 'Email is required'],
-      unique: true,
+      // unique: true,
       trim: true,
       lowercase: true,
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
+      required: [true, "Password is required"],
     },
     profile: {
       type: String, // cloudinary url
       default:
-        'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png',
+        "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png",
     },
     dob: {
       type: String,
@@ -72,6 +72,6 @@ const userSchema = new mongoose.Schema(
 //   return await bcrypt.compare(password, this.password);
 // };
 
-const User = mongoose.model('User', userSchema);
+const User = mongoose.model("User", userSchema);
 
 export default User;
