@@ -39,14 +39,14 @@ app.use(cookieParser());
 app.use(
   cors({
     origin: [
-      "*",
       "http://localhost:3001",
       "http://localhost:3000",
-      "https://www.dashboard.medqueue.live/",
+      "https://www.dashboard.medqueue.live",
+      "https://dashboard.medqueue.live",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["*", "Authorization", "Content-Type"],
+    allowedHeaders: ["Authorization", "Content-Type"],
   })
 );
 
