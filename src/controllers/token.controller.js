@@ -35,6 +35,7 @@ import {
   getEndOfDay,
 } from "../utils/timezoneUtils.js";
 import { TZDate } from "@date-fns/tz";
+import { DateTime } from "luxon";
 
 // @@ Generate token
 export const generateToken = asyncHandler(async (req, res) => {
@@ -724,14 +725,16 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 
 // @@ Get QR Code for admin
 export const getQRCode = asyncHandler(async (req, res) => {
-  console.log("getQRCode ki api ");
-  const targetDate = new Date();
-  const startOfDay = addHours(new Date(targetDate.setHours(0, 0, 0, 0)), 5);
-  const endOfDay = addHours(new Date(targetDate.setHours(23, 59, 59, 999)), 5);
+  console.log("getQRCode ki api (Luxon version)");
 
-  console.log("targetDate : ", targetDate);
-  console.log("startOfDay : ", startOfDay);
-  console.log("endOfDay : ", endOfDay);
+  // Use Asia/Karachi timezone
+  const timeZone = "Asia/Karachi";
+  const now = DateTime.now().setZone(timeZone);
+  const startOfDay = now.startOf("day").toJSDate();
+  const endOfDay = now.endOf("day").toJSDate();
+
+  console.log("startOfDay (Asia/Karachi):", startOfDay);
+  console.log("endOfDay (Asia/Karachi):", endOfDay);
 
   const queue = await Queue.findOne({
     date: { $gte: startOfDay, $lt: endOfDay },
@@ -741,7 +744,6 @@ export const getQRCode = asyncHandler(async (req, res) => {
     throw new ApiError(404, "No queue found for today");
   }
 
-  // Generate a unique QR code URL that uses the custom scheme for deep linking
   const qrCodeUrl = `medqueue://scan-qr/${queue._id}`;
 
   res
