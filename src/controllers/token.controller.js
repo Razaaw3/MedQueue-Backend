@@ -6,24 +6,7 @@ import { ApiResponse } from "../utils/errors/ApiResponse.js";
 import { asyncHandler } from "../utils/errors/asyncHandler.js";
 import { io } from "../../index.js";
 import Clinic from "../models/clinic.model.js";
-import moment from "moment-timezone";
-import {
-  parseISO,
-  format,
-  isBefore,
-  isAfter,
-  addMinutes,
-  isSameDay,
-  parse,
-  set,
-  formatISO,
-  addHours,
-  differenceInMinutes,
-  setHours,
-  getHours,
-  getMinutes,
-  startOfDay,
-} from "date-fns";
+
 import PrivacySettings from "../models/PrivacySettings.model.js";
 import {
   toAppTimezone,
@@ -34,7 +17,6 @@ import {
   getStartOfDay,
   getEndOfDay,
 } from "../utils/timezoneUtils.js";
-import { TZDate } from "@date-fns/tz";
 import { DateTime } from "luxon";
 
 // @@ Generate token
@@ -50,10 +32,11 @@ export const generateToken = asyncHandler(async (req, res) => {
   // Ensure date is properly parsed
   let requestedDate;
   try {
-    requestedDate = addHours(new Date(date), 5);
-    if (isNaN(requestedDate.getTime())) {
+    const dateTime = DateTime.fromISO(date);
+    if (!dateTime.isValid) {
       throw new Error("Invalid date format");
     }
+    requestedDate = dateTime.plus({ hours: 5 }).toJSDate();
   } catch (error) {
     throw new ApiError(400, "Invalid date format provided");
   }
@@ -74,9 +57,13 @@ export const generateToken = asyncHandler(async (req, res) => {
     );
 
   // Convert provided date to application timezone
-  const today = addHours(getCurrentAppTime(), 5);
+  const today = DateTime.fromJSDate(getCurrentAppTime())
+    .plus({ hours: 5 })
+    .toJSDate();
   console.log("today:", today);
-  const startOfRequestedDate = addHours(getStartOfDay(requestedDate), 5);
+  const startOfRequestedDate = DateTime.fromJSDate(getStartOfDay(requestedDate))
+    .plus({ hours: 5 })
+    .toJSDate();
   console.log("startOfRequestedDate:", startOfRequestedDate);
 
   // Check if user already has an active token for the selected date
@@ -90,46 +77,31 @@ export const generateToken = asyncHandler(async (req, res) => {
   }
 
   // Convert clinic opening time to application timezone
-  const clinicDate = parse(
-    clinic.clinicOpeningTime,
-    "hh:mm a",
-    getCurrentAppTime()
-  );
-  console.log("clinicDate:", clinicDate);
-  const openingHours = getHours(clinicDate);
-  const openingMinutes = getMinutes(clinicDate);
-
-  const todayWithTime = set(today, {
-    hours: openingHours,
-    minutes: openingMinutes,
-    seconds: 0,
-    milliseconds: 0,
-  });
-  console.log("todayWithTime:", todayWithTime);
-
-  const clinicClosingTime = parse(
-    clinic.clinicClosingTime,
-    "hh:mm a",
-    getCurrentAppTime()
-  );
-  console.log("clinicClosingTime:", clinicClosingTime);
-  const closingHours = getHours(clinicClosingTime);
-  const closingMinutes = getMinutes(clinicClosingTime);
-
-  const todayWithTimeClose = set(today, {
-    hours: closingHours,
-    minutes: closingMinutes,
-    seconds: 0,
-    milliseconds: 0,
-  });
-  console.log("todayWithTimeClose:", todayWithTimeClose);
-
-  const openingTime = toAppTimezone(todayWithTime);
+  const openingTime = DateTime.fromFormat(clinic.clinicOpeningTime, "hh:mm a")
+    .set({
+      year: DateTime.fromJSDate(today).year,
+      month: DateTime.fromJSDate(today).month,
+      day: DateTime.fromJSDate(today).day,
+      second: 0,
+      millisecond: 0,
+    })
+    .toJSDate();
   console.log("openingTime:", openingTime);
-  const closingTime = toAppTimezone(todayWithTimeClose);
+
+  const closingTime = DateTime.fromFormat(clinic.clinicClosingTime, "hh:mm a")
+    .set({
+      year: DateTime.fromJSDate(today).year,
+      month: DateTime.fromJSDate(today).month,
+      day: DateTime.fromJSDate(today).day,
+      second: 0,
+      millisecond: 0,
+    })
+    .toJSDate();
   console.log("closingTime:", closingTime);
 
-  const tokenStartTime = addMinutes(openingTime, -15);
+  const tokenStartTime = DateTime.fromJSDate(openingTime)
+    .minus({ minutes: 15 })
+    .toJSDate();
   console.log("tokenStartTime:", tokenStartTime);
 
   // Find the queue for today
@@ -154,7 +126,9 @@ export const generateToken = asyncHandler(async (req, res) => {
 
     if (lastTokenId) {
       const lastToken = await UserToken.findById(lastTokenId._id);
-      estimatedTurnTime = addMinutes(lastToken.estimatedTurnTime, 10);
+      estimatedTurnTime = DateTime.fromJSDate(lastToken.estimatedTurnTime)
+        .plus({ minutes: 10 })
+        .toJSDate();
       console.log("estimatedTurnTime (from lastToken):", estimatedTurnTime);
     } else {
       const activeToken = await UserToken.findOne({
@@ -168,21 +142,31 @@ export const generateToken = asyncHandler(async (req, res) => {
       } else {
         estimatedTurnTime = openingTime;
         console.log("estimatedTurnTime (from openingTime):", estimatedTurnTime);
-        const now = addHours(getCurrentAppTime(), 5);
+        const now = DateTime.fromJSDate(getCurrentAppTime())
+          .plus({ hours: 5 })
+          .toJSDate();
         console.log("now:", now);
-        if (isAfter(now, openingTime)) {
-          queue.waitTime = differenceInMinutes(now, openingTime);
+        if (DateTime.fromJSDate(now) > DateTime.fromJSDate(openingTime)) {
+          queue.waitTime = DateTime.fromJSDate(now).diff(
+            DateTime.fromJSDate(openingTime),
+            "minutes"
+          ).minutes;
         }
       }
     }
   } else {
     estimatedTurnTime = openingTime;
     console.log("estimatedTurnTime (no upcomingTokenIds):", estimatedTurnTime);
-    const now = addHours(getCurrentAppTime(), 5);
+    const now = DateTime.fromJSDate(getCurrentAppTime())
+      .plus({ hours: 5 })
+      .toJSDate();
     console.log("now:", now);
-    if (isAfter(now, openingTime)) {
+    if (DateTime.fromJSDate(now) > DateTime.fromJSDate(openingTime)) {
       if (!queue || queue.upcomingTokenIds.length === 0) {
-        queue.waitTime = differenceInMinutes(now, openingTime);
+        queue.waitTime = DateTime.fromJSDate(now).diff(
+          DateTime.fromJSDate(openingTime),
+          "minutes"
+        ).minutes;
       }
     }
   }
@@ -202,8 +186,13 @@ export const generateToken = asyncHandler(async (req, res) => {
     date: startOfRequestedDate,
     checkInOutStatus: "pending",
     isActive: false,
-    tokenGenerationTime: addHours(getCurrentAppTime(), 5),
-    estimatedEndTime: addMinutes(estimatedTurnTime, 10),
+    tokenGenerationTime: DateTime.fromJSDate(getCurrentAppTime())
+      .toUTC()
+      .toJSDate(),
+    estimatedEndTime: DateTime.fromJSDate(estimatedTurnTime)
+      .plus({ minutes: 10 })
+      .toUTC()
+      .toJSDate(),
   });
   console.log("userToken object:", {
     userId,
@@ -212,8 +201,10 @@ export const generateToken = asyncHandler(async (req, res) => {
     date: startOfRequestedDate,
     checkInOutStatus: "pending",
     isActive: false,
-    tokenGenerationTime: addHours(getCurrentAppTime(), 5),
-    estimatedEndTime: addMinutes(estimatedTurnTime, 10),
+    tokenGenerationTime: DateTime.fromJSDate(getCurrentAppTime())
+      .toUTC()
+      .toISO(),
+    estimatedEndTime: DateTime.fromJSDate(estimatedTurnTime).toUTC().toISO(),
   });
 
   io.emit("tokenUpdate", {
@@ -235,9 +226,25 @@ export const generateToken = asyncHandler(async (req, res) => {
     queue: fullQueue.upcomingTokenIds,
   });
 
-  res
-    .status(201)
-    .json(new ApiResponse(201, userToken, "Token generated successfully"));
+  res.status(201).json(
+    new ApiResponse(
+      201,
+      {
+        ...userToken.toObject(),
+        tokenGenerationTime: DateTime.fromJSDate(userToken.tokenGenerationTime)
+          .toUTC()
+          .toISO(),
+        estimatedTurnTime: DateTime.fromJSDate(userToken.estimatedTurnTime)
+          .toUTC()
+          .toISO(),
+        date: DateTime.fromJSDate(userToken.date).toUTC().toISO(),
+        estimatedEndTime: DateTime.fromJSDate(userToken.estimatedEndTime)
+          .toUTC()
+          .toISO(),
+      },
+      "Token generated successfully"
+    )
+  );
 });
 
 // @@ Cancel token
@@ -293,7 +300,9 @@ export const cancelToken = asyncHandler(async (req, res) => {
     socket.emit("tokenCancelled", {
       tokenId,
       cancelledBy: role,
-      cancelledAt: token.cancellationDetails.cancelledAt,
+      cancelledAt: DateTime.fromJSDate(token.cancellationDetails.cancelledAt)
+        .toUTC()
+        .toISO(),
     });
   }
 
@@ -306,21 +315,23 @@ export const cancelToken = asyncHandler(async (req, res) => {
       {
         token: {
           ...token.toObject(),
-          date: formatInAppTimezone(token.date, "yyyy-MM-dd"),
-          estimatedTurnTime: formatInAppTimezone(
-            token.estimatedTurnTime,
-            "HH:mm"
-          ),
-          tokenGenerationTime: formatInAppTimezone(token.tokenGenerationTime),
-          estimatedEndTime: formatInAppTimezone(
-            token.estimatedEndTime,
-            "HH:mm"
-          ),
+          date: DateTime.fromJSDate(token.date).toUTC().toISO(),
+          estimatedTurnTime: DateTime.fromJSDate(token.estimatedTurnTime)
+            .toUTC()
+            .toISO(),
+          tokenGenerationTime: DateTime.fromJSDate(token.tokenGenerationTime)
+            .toUTC()
+            .toISO(),
+          estimatedEndTime: DateTime.fromJSDate(token.estimatedEndTime)
+            .toUTC()
+            .toISO(),
           cancellationDetails: {
             ...token.cancellationDetails,
-            cancelledAt: formatInAppTimezone(
+            cancelledAt: DateTime.fromJSDate(
               token.cancellationDetails.cancelledAt
-            ),
+            )
+              .toUTC()
+              .toISO(),
           },
         },
       },
@@ -333,8 +344,12 @@ export const cancelToken = asyncHandler(async (req, res) => {
 export const getQueueStatus = asyncHandler(async (req, res) => {
   console.log("getQueueStatus ki api ");
   const targetDate = getCurrentAppTime();
-  const startOfDay = addHours(getStartOfDay(targetDate), 5);
-  const endOfDay = addHours(getEndOfDay(targetDate), 5);
+  const startOfDay = DateTime.fromJSDate(getStartOfDay(targetDate))
+    .plus({ hours: 5 })
+    .toJSDate();
+  const endOfDay = DateTime.fromJSDate(getEndOfDay(targetDate))
+    .plus({ hours: 5 })
+    .toJSDate();
 
   console.log("targetDate : ", targetDate);
   console.log("startOfDay : ", startOfDay);
@@ -358,8 +373,12 @@ export const getQueueStatus = asyncHandler(async (req, res) => {
 export const getQueueDoctor = asyncHandler(async (req, res) => {
   console.log("getQueueDoctor ki api ");
   const targetDate = getCurrentAppTime();
-  const startOfDay = addHours(getStartOfDay(targetDate), 5);
-  const endOfDay = addHours(getEndOfDay(targetDate), 5);
+  const startOfDay = DateTime.fromJSDate(getStartOfDay(targetDate))
+    .plus({ hours: 5 })
+    .toJSDate();
+  const endOfDay = DateTime.fromJSDate(getEndOfDay(targetDate))
+    .plus({ hours: 5 })
+    .toJSDate();
 
   console.log("targetDate : ", targetDate);
   console.log("startOfDay : ", startOfDay);
@@ -456,10 +475,16 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
         let offset = 0;
 
         if (token.isEmergency) {
-          offset = differenceInMinutes(currentTime, token.tokenActivationTime);
+          offset = DateTime.fromJSDate(currentTime).diff(
+            DateTime.fromJSDate(token.tokenActivationTime),
+            "minutes"
+          ).minutes;
         } else {
           offset =
-            differenceInMinutes(currentTime, token.tokenActivationTime) - 10;
+            DateTime.fromJSDate(currentTime).diff(
+              DateTime.fromJSDate(token.tokenActivationTime),
+              "minutes"
+            ).minutes - 10;
         }
 
         queue.activeTokenId = nextToken._id;
@@ -498,13 +523,16 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
         if (nextToken) {
           let offset = 0;
           if (token.isEmergency) {
-            offset = differenceInMinutes(
-              currentTime,
-              token.tokenActivationTime
-            );
+            offset = DateTime.fromJSDate(currentTime).diff(
+              DateTime.fromJSDate(token.tokenActivationTime),
+              "minutes"
+            ).minutes;
           } else {
             offset =
-              differenceInMinutes(currentTime, token.tokenActivationTime) - 10;
+              DateTime.fromJSDate(currentTime).diff(
+                DateTime.fromJSDate(token.tokenActivationTime),
+                "minutes"
+              ).minutes - 10;
           }
 
           queue.activeTokenId = nextToken._id;
@@ -538,10 +566,16 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
         let offset = 0;
 
         if (token.isEmergency) {
-          offset = differenceInMinutes(currentTime, token.tokenActivationTime);
+          offset = DateTime.fromJSDate(currentTime).diff(
+            DateTime.fromJSDate(token.tokenActivationTime),
+            "minutes"
+          ).minutes;
         } else {
           offset =
-            differenceInMinutes(currentTime, token.tokenActivationTime) - 10;
+            DateTime.fromJSDate(currentTime).diff(
+              DateTime.fromJSDate(token.tokenActivationTime),
+              "minutes"
+            ).minutes - 10;
         }
 
         queue.offset = offset + queue.offset;
@@ -563,10 +597,11 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
     case "onsite":
       const isValid =
         currentTime <=
-        addMinutes(
-          addMinutes(addMinutes(token.estimatedTurnTime, 10), queue.waitTime),
-          queue.offset
-        );
+        DateTime.fromJSDate(token.estimatedTurnTime)
+          .plus({ minutes: 10 })
+          .plus({ minutes: queue.waitTime })
+          .plus({ minutes: queue.offset })
+          .toJSDate();
       token.checkInOutStatus = checkInOutStatus;
       let waitTime = 0;
       if (queue.lastTokenId) {
@@ -575,10 +610,10 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
           token.tokenActivationTime = currentTime;
 
           console.log("!queue.activeTokenId", queue.exceptional);
-          waitTime = differenceInMinutes(
-            currentTime,
-            queue.lastTokenId.checkedOutTime
-          );
+          waitTime = DateTime.fromJSDate(currentTime).diff(
+            DateTime.fromJSDate(queue.lastTokenId.checkedOutTime),
+            "minutes"
+          ).minutes;
 
           console.log("WaitTime is : ", waitTime);
           queue.waitTime = waitTime + queue.waitTime;
@@ -649,16 +684,26 @@ export const updateTokenStatus = asyncHandler(async (req, res) => {
 
           const clinic = await Clinic.findOne({}).lean();
 
-          const parsedDate = parse(
+          const parsedDate = DateTime.fromFormat(
             clinic.clinicOpeningTime,
-            "hh:mm a",
-            getCurrentAppTime()
-          );
+            "hh:mm a"
+          )
+            .set({
+              year: DateTime.fromJSDate(getCurrentAppTime()).year,
+              month: DateTime.fromJSDate(getCurrentAppTime()).month,
+              day: DateTime.fromJSDate(getCurrentAppTime()).day,
+              second: 0,
+              millisecond: 0,
+            })
+            .toJSDate();
           console.log("parsedDate : ", parsedDate);
           queue.activeTokenId = token._id;
           token.isActive = true;
 
-          const waitTime = differenceInMinutes(currentTime, parsedDate);
+          const waitTime = DateTime.fromJSDate(currentTime).diff(
+            DateTime.fromJSDate(parsedDate),
+            "minutes"
+          ).minutes;
           queue.waitTime = waitTime;
 
           console.log("io.emit");
@@ -796,10 +841,16 @@ export const getTokenHistory = asyncHandler(async (req, res) => {
   const formattedTokens = tokens.map((token) => {
     return {
       ...token.toObject(),
-      date: formatInAppTimezone(token.date, "yyyy-MM-dd"),
-      estimatedTurnTime: formatInAppTimezone(token.estimatedTurnTime, "HH:mm"),
-      tokenGenerationTime: formatInAppTimezone(token.tokenGenerationTime),
-      estimatedEndTime: formatInAppTimezone(token.estimatedEndTime, "HH:mm"),
+      date: DateTime.fromJSDate(token.date).toUTC().toISO(),
+      estimatedTurnTime: DateTime.fromJSDate(token.estimatedTurnTime)
+        .toUTC()
+        .toISO(),
+      tokenGenerationTime: DateTime.fromJSDate(token.tokenGenerationTime)
+        .toUTC()
+        .toISO(),
+      estimatedEndTime: DateTime.fromJSDate(token.estimatedEndTime)
+        .toUTC()
+        .toISO(),
       OriginalToken: token.toObject(),
     };
   });
@@ -827,11 +878,11 @@ export const getAllTokensByDate = asyncHandler(async (req, res) => {
   const parseDate = (dateInput) => {
     if (!dateInput) return null;
     if (dateInput instanceof Date) return dateInput;
-    return parseISO(dateInput);
+    return DateTime.fromISO(dateInput).toJSDate();
   };
 
   const parsedDate = parseDate(date);
-  const dayStart = startOfDay(parsedDate);
+  const dayStart = DateTime.fromJSDate(parsedDate).startOf("day").toJSDate();
   const dayEnd = getEndOfDay(parsedDate);
 
   console.log("dayStart : ", dayStart);
@@ -850,7 +901,9 @@ export const getAllTokensByDate = asyncHandler(async (req, res) => {
   if (!tokens || tokens.length === 0) {
     throw new ApiError(
       404,
-      `No tokens found for date: ${format(dayStart, "yyyy-MM-dd")}`
+      `No tokens found for date: ${DateTime.fromJSDate(dayStart).toFormat(
+        "yyyy-MM-dd"
+      )}`
     );
   }
 
@@ -858,14 +911,14 @@ export const getAllTokensByDate = asyncHandler(async (req, res) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = dateObj;
-    return format(pakistanDate, "HH:mm");
+    return DateTime.fromJSDate(pakistanDate).toFormat("HH:mm");
   };
 
   const formatDateTime = (date) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = dateObj;
-    return format(pakistanDate, "yyyy-MM-dd HH:mm");
+    return DateTime.fromJSDate(pakistanDate).toFormat("yyyy-MM-dd HH:mm");
   };
 
   const totalTokens = tokens.length;
@@ -883,7 +936,7 @@ export const getAllTokensByDate = asyncHandler(async (req, res) => {
 
   const formattedTokens = tokens.map((token) => ({
     ...token.toObject(),
-    date: format(parseDate(token.date), "yyyy-MM-dd"),
+    date: DateTime.fromJSDate(parseDate(token.date)).toFormat("yyyy-MM-dd"),
     estimatedTurnTime: formatTime(token.estimatedTurnTime),
     tokenGenerationTime: formatDateTime(token.tokenGenerationTime),
     estimatedEndTime: formatTime(token.estimatedEndTime),
@@ -903,12 +956,11 @@ export const getAllTokensByDate = asyncHandler(async (req, res) => {
           active: activeTokens,
           ...statusCounts,
         },
-        date: format(dayStart, "yyyy-MM-dd"),
+        date: DateTime.fromJSDate(dayStart).toFormat("yyyy-MM-dd"),
       },
-      `Tokens retrieved successfully for date: ${format(
-        dayStart,
-        "yyyy-MM-dd"
-      )}`
+      `Tokens retrieved successfully for date: ${DateTime.fromJSDate(
+        dayStart
+      ).toFormat("yyyy-MM-dd")}`
     )
   );
 });
@@ -925,11 +977,11 @@ export const getActiveTokenByDate = asyncHandler(async (req, res) => {
   const parseDate = (dateInput) => {
     if (!dateInput) return null;
     if (dateInput instanceof Date) return dateInput;
-    return parseISO(dateInput);
+    return DateTime.fromISO(dateInput).toJSDate();
   };
 
   const parsedDate = parseDate(date);
-  const dayStart = startOfDay(parsedDate);
+  const dayStart = DateTime.fromJSDate(parsedDate).startOf("day").toJSDate();
   const dayEnd = getEndOfDay(parsedDate);
 
   const activeToken = await UserToken.findOne({
@@ -947,19 +999,21 @@ export const getActiveTokenByDate = asyncHandler(async (req, res) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = dateObj;
-    return format(pakistanDate, "HH:mm");
+    return DateTime.fromJSDate(pakistanDate).toFormat("HH:mm");
   };
 
   const formatDateTime = (date) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = dateObj;
-    return format(pakistanDate, "yyyy-MM-dd HH:mm");
+    return DateTime.fromJSDate(pakistanDate).toFormat("yyyy-MM-dd HH:mm");
   };
 
   const formattedToken = {
     ...activeToken.toObject(),
-    date: format(parseDate(activeToken.date), "yyyy-MM-dd"),
+    date: DateTime.fromJSDate(parseDate(activeToken.date)).toFormat(
+      "yyyy-MM-dd"
+    ),
     estimatedTurnTime: formatTime(activeToken.estimatedTurnTime),
     tokenGenerationTime: formatDateTime(activeToken.tokenGenerationTime),
     estimatedEndTime: formatTime(activeToken.estimatedEndTime),
@@ -998,7 +1052,7 @@ export const getTokensByStatus = asyncHandler(async (req, res) => {
   const parseDate = (dateInput) => {
     if (!dateInput) return null;
     if (dateInput instanceof Date) return dateInput;
-    return parseISO(dateInput);
+    return DateTime.fromISO(dateInput).toJSDate();
   };
 
   const tokens = await UserToken.find({
@@ -1014,19 +1068,19 @@ export const getTokensByStatus = asyncHandler(async (req, res) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = dateObj;
-    return format(pakistanDate, "HH:mm");
+    return DateTime.fromJSDate(pakistanDate).toFormat("HH:mm");
   };
 
   const formatDateTime = (date) => {
     if (!date) return null;
     const dateObj = parseDate(date);
     const pakistanDate = dateObj;
-    return format(pakistanDate, "yyyy-MM-dd HH:mm");
+    return DateTime.fromJSDate(pakistanDate).toFormat("yyyy-MM-dd HH:mm");
   };
 
   const formattedTokens = tokens.map((token) => ({
     ...token.toObject(),
-    date: format(parseDate(token.date), "yyyy-MM-dd"),
+    date: DateTime.fromJSDate(parseDate(token.date)).toFormat("yyyy-MM-dd"),
     estimatedTurnTime: formatTime(token.estimatedTurnTime),
     tokenGenerationTime: formatDateTime(token.tokenGenerationTime),
     estimatedEndTime: formatTime(token.estimatedEndTime),
@@ -1121,21 +1175,15 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     );
 
   // Convert provided date and today to start of the day (without time)
-  const requestedDate = addHours(
-    formatISO(
-      addHours(new TZDate(date, "Asia/Karachi"), 5).setHours(0, 0, 0, 0),
-      {
-        representation: "complete",
-      }
-    ),
-    5
-  );
-  console.log(
-    "Requested date with TZDate to ISOString using formatISO: ",
-    requestedDate
-  );
-  let today = TZDate.tz("Asia/Karachi").toISOString();
-  console.log("Today's date with TZDate to ISOString : ", today);
+  const requestedDate = DateTime.fromJSDate(date)
+    .setZone("Asia/Karachi")
+    .plus({ hours: 5 })
+    .startOf("day")
+    .plus({ hours: 5 })
+    .toJSDate();
+  console.log("Requested date with Luxon: ", requestedDate);
+  let today = DateTime.now().setZone("Asia/Karachi").toJSDate();
+  console.log("Today's date with Luxon: ", today);
 
   // // //Uncomment the below feature if you are done with the development
 
@@ -1158,48 +1206,35 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
   }
 
   // Convert clinic opening and closing times to today's full DateTime
-  const clinicDate = parse(
-    clinic.clinicOpeningTime,
-    "hh:mm a",
-    getCurrentAppTime()
-  );
+  const openingTime = DateTime.fromFormat(clinic.clinicOpeningTime, "hh:mm a")
+    .set({
+      year: DateTime.fromJSDate(today).year,
+      month: DateTime.fromJSDate(today).month,
+      day: DateTime.fromJSDate(today).day,
+      second: 0,
+      millisecond: 0,
+    })
+    .setZone("Asia/Karachi")
+    .toJSDate();
 
-  console.log("Clinic date with parse : ", clinicDate);
-  const openingHours = getHours(clinicDate);
-  const openingMinutes = getMinutes(clinicDate);
+  console.log("Opening time with Luxon: ", openingTime);
 
-  const todayWithTime = set(today, {
-    hours: openingHours,
-    minutes: openingMinutes,
-    seconds: 0,
-    milliseconds: 0,
-  });
+  const closingTime = DateTime.fromFormat(clinic.clinicClosingTime, "hh:mm a")
+    .set({
+      year: DateTime.fromJSDate(today).year,
+      month: DateTime.fromJSDate(today).month,
+      day: DateTime.fromJSDate(today).day,
+      second: 0,
+      millisecond: 0,
+    })
+    .setZone("Asia/Karachi")
+    .minus({ hours: 5 })
+    .toJSDate();
 
-  const clinicClosingTime = parse(
-    clinic.clinicClosingTime,
-    "hh:mm a",
-    getCurrentAppTime()
-  );
-  console.log("Clinic closing time with parse : ", clinicClosingTime);
-  const closingHours = getHours(clinicClosingTime);
-  const closingMinutes = getMinutes(clinicClosingTime);
-
-  const todayWithTimeClose = set(today, {
-    hours: closingHours,
-    minutes: closingMinutes,
-    seconds: 0,
-    milliseconds: 0,
-  });
-
-  const openingTime = new TZDate(todayWithTime, "Asia/Karachi");
-  console.log("Opening time with TZDate : ", openingTime);
-
-  const closingTime = addHours(
-    new TZDate(todayWithTimeClose, "Asia/Karachi").toISOString(),
-    -5
-  );
-  console.log("Closing time with TZDate : ", closingTime);
-  const tokenStartTime = addMinutes(openingTime, -15);
+  console.log("Closing time with Luxon: ", closingTime);
+  const tokenStartTime = DateTime.fromJSDate(openingTime)
+    .minus({ minutes: 15 })
+    .toJSDate();
 
   console.log(getCurrentAppTime());
 
@@ -1237,10 +1272,9 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
       console.log("If condition is true");
       const lastToken = await UserToken.findById(lastTokenId._id);
 
-      estimatedTurnTime = addMinutes(
-        lastToken.estimatedTurnTime,
-        10
-      ).toISOString();
+      estimatedTurnTime = DateTime.fromJSDate(lastToken.estimatedTurnTime)
+        .plus({ minutes: 10 })
+        .toJSDate();
 
       console.log("Estimated turn time : ", estimatedTurnTime);
     } else {
@@ -1257,20 +1291,30 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
       } else {
         console.log("Active token is false");
         estimatedTurnTime = openingTime;
-        const now = addHours(getCurrentAppTime(), 5);
+        const now = DateTime.fromJSDate(getCurrentAppTime())
+          .plus({ hours: 5 })
+          .toJSDate();
 
-        if (isAfter(now, openingTime)) {
-          queue.waitTime = differenceInMinutes(now, openingTime);
+        if (DateTime.fromJSDate(now) > DateTime.fromJSDate(openingTime)) {
+          queue.waitTime = DateTime.fromJSDate(now).diff(
+            DateTime.fromJSDate(openingTime),
+            "minutes"
+          ).minutes;
         }
       }
     }
   } else {
     estimatedTurnTime = openingTime;
-    const now = addHours(getCurrentAppTime(), 5);
+    const now = DateTime.fromJSDate(getCurrentAppTime())
+      .plus({ hours: 5 })
+      .toJSDate();
 
-    if (isAfter(now, openingTime)) {
+    if (DateTime.fromJSDate(now) > DateTime.fromJSDate(openingTime)) {
       if (!queue || queue.upcomingTokenIds.length === 0) {
-        queue.waitTime = differenceInMinutes(now, openingTime);
+        queue.waitTime = DateTime.fromJSDate(now).diff(
+          DateTime.fromJSDate(openingTime),
+          "minutes"
+        ).minutes;
       }
     }
   }
@@ -1289,8 +1333,13 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
     date: requestedDate,
     checkInOutStatus: "pending",
     isActive: false,
-    tokenGenerationTime: addHours(getCurrentAppTime(), 5),
-    estimatedEndTime: addMinutes(estimatedTurnTime, 10),
+    tokenGenerationTime: DateTime.fromJSDate(getCurrentAppTime())
+      .toUTC()
+      .toJSDate(),
+    estimatedEndTime: DateTime.fromJSDate(estimatedTurnTime)
+      .plus({ minutes: 10 })
+      .toUTC()
+      .toJSDate(),
   });
 
   io.emit("tokenUpdate", {
@@ -1303,9 +1352,25 @@ export const myTokenDetail = asyncHandler(async (req, res) => {
 
   queue.upcomingTokenIds.push(userToken._id);
 
-  res
-    .status(201)
-    .json(new ApiResponse(201, userToken, "Token generated successfully"));
+  res.status(201).json(
+    new ApiResponse(
+      201,
+      {
+        ...userToken.toObject(),
+        tokenGenerationTime: DateTime.fromJSDate(userToken.tokenGenerationTime)
+          .toUTC()
+          .toISO(),
+        estimatedTurnTime: DateTime.fromJSDate(userToken.estimatedTurnTime)
+          .toUTC()
+          .toISO(),
+        date: DateTime.fromJSDate(userToken.date).toUTC().toISO(),
+        estimatedEndTime: DateTime.fromJSDate(userToken.estimatedEndTime)
+          .toUTC()
+          .toISO(),
+      },
+      "Token generated successfully"
+    )
+  );
 });
 
 // @@ Get active tokens for table with pagination and filters
@@ -1329,7 +1394,7 @@ export const getActiveTokensTable = async (req, res) => {
       targetDate = new Date();
     }
 
-    const dayStart = startOfDay(targetDate);
+    const dayStart = DateTime.fromJSDate(targetDate).startOf("day").toJSDate();
     const dayEnd = getEndOfDay(targetDate);
 
     const query = {
@@ -1628,53 +1693,38 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
   }
 
   // Convert clinic opening time to application timezone
-  const clinicDate = parse(
-    clinic.clinicOpeningTime,
-    "hh:mm a",
-    getCurrentAppTime()
-  );
-  console.log("clinicDate : ", clinicDate);
-  const openingHours = getHours(clinicDate);
-  const openingMinutes = getMinutes(clinicDate);
+  const openingTime = DateTime.fromFormat(clinic.clinicOpeningTime, "hh:mm a")
+    .set({
+      year: DateTime.fromJSDate(today).year,
+      month: DateTime.fromJSDate(today).month,
+      day: DateTime.fromJSDate(today).day,
+      second: 0,
+      millisecond: 0,
+    })
+    .toJSDate();
 
-  const todayWithTime = set(today, {
-    hours: openingHours,
-    minutes: openingMinutes,
-    seconds: 0,
-    milliseconds: 0,
-  });
-
-  console.log("todayWithTime : ", todayWithTime);
-
-  const clinicClosingTime = parse(
-    clinic.clinicClosingTime,
-    "hh:mm a",
-    getCurrentAppTime()
-  );
-
-  console.log("clinicClosingTime : ", clinicClosingTime);
-
-  const closingHours = getHours(clinicClosingTime);
-  const closingMinutes = getMinutes(clinicClosingTime);
-
-  const todayWithTimeClose = set(today, {
-    hours: closingHours,
-    minutes: closingMinutes,
-    seconds: 0,
-    milliseconds: 0,
-  });
-
-  const openingTime = toAppTimezone(todayWithTime);
   console.log("openingTime : ", openingTime);
-  const closingTime = toAppTimezone(todayWithTimeClose);
+
+  const closingTime = DateTime.fromFormat(clinic.clinicClosingTime, "hh:mm a")
+    .set({
+      year: DateTime.fromJSDate(today).year,
+      month: DateTime.fromJSDate(today).month,
+      day: DateTime.fromJSDate(today).day,
+      second: 0,
+      millisecond: 0,
+    })
+    .toJSDate();
+
   console.log("closingTime : ", closingTime);
 
-  const tokenStartTime = addMinutes(openingTime, -15);
+  const tokenStartTime = DateTime.fromJSDate(openingTime)
+    .minus({ minutes: 15 })
+    .toJSDate();
   console.log("tokenStartTime : ", tokenStartTime);
 
   // Find the queue for today
   let queue = await Queue.findOne({
-    date: addHours(requestedDate, 5),
+    date: DateTime.fromJSDate(requestedDate).plus({ hours: 5 }).toJSDate(),
   }).populate("activeTokenId lastTokenId");
 
   // Determine estimated turn time
@@ -1686,38 +1736,44 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
 
     console.log("lastToken : ", lastToken);
 
-    estimatedTurnTime = addMinutes(
-      lastToken.estimatedTurnTime,
-      10
-    ).toISOString();
+    estimatedTurnTime = DateTime.fromJSDate(lastToken.estimatedTurnTime)
+      .plus({ minutes: 10 })
+      .toJSDate();
   }
 
   // Get last token number for the day
 
   const lastTokenOfDay = await UserToken.findOne({
-    date: addHours(requestedDate, 5),
+    date: DateTime.fromJSDate(requestedDate).plus({ hours: 5 }).toJSDate(),
   });
   const tokenNumber = lastTokenOfDay ? queue.upcomingTokenIds.length + 1 : 1;
 
   // Create new token
   let userToken;
 
+  // Use current PKT time for emergency token
+  const nowPKT = DateTime.now().setZone("Asia/Karachi");
+  const nowUTC = nowPKT.toUTC().toJSDate();
+
   if (!queue || (!queue.activeTokenId && !queue.lastTokenId)) {
     userToken = new UserToken({
       userId,
       tokenNumber,
-      estimatedTurnTime: addHours(requestedDate, 5),
-      date: addHours(requestedDate, 5),
+      estimatedTurnTime: nowUTC,
+      date: DateTime.fromJSDate(requestedDate).toUTC().toJSDate(),
       checkInOutStatus: "onsite",
       isActive: true,
-      tokenGenerationTime: addHours(requestedDate, 5),
-      estimatedEndTime: addMinutes(requestedDate, 10),
+      tokenGenerationTime: nowUTC,
+      estimatedEndTime: DateTime.fromJSDate(nowUTC)
+        .plus({ minutes: 10 })
+        .toUTC()
+        .toJSDate(),
       isEmergency: true,
-      tokenActivationTime: addHours(requestedDate, 5),
+      tokenActivationTime: nowUTC,
     });
     console.log("userToken : ", userToken);
     queue = new Queue({
-      date: addHours(requestedDate, 5),
+      date: DateTime.fromJSDate(requestedDate).toUTC().toJSDate(),
       activeTokenId: userToken._id,
       upcomingTokenIds: [],
     });
@@ -1726,14 +1782,17 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
       userToken = new UserToken({
         userId,
         tokenNumber,
-        estimatedTurnTime: addHours(requestedDate, 5),
-        date: addHours(requestedDate, 5),
+        estimatedTurnTime: nowUTC,
+        date: DateTime.fromJSDate(requestedDate).toUTC().toJSDate(),
         checkInOutStatus: "onsite",
         isActive: true,
-        tokenGenerationTime: addHours(requestedDate, 5),
-        estimatedEndTime: addMinutes(requestedDate, 10),
+        tokenGenerationTime: nowUTC,
+        estimatedEndTime: DateTime.fromJSDate(nowUTC)
+          .plus({ minutes: 10 })
+          .toUTC()
+          .toJSDate(),
         isEmergency: true,
-        tokenActivationTime: addHours(requestedDate, 5),
+        tokenActivationTime: nowUTC,
       });
       console.log("userToken : ", userToken);
       const currentlyActiveToken = await UserToken.findOne({
@@ -1742,30 +1801,33 @@ export const generateEmergencyToken = asyncHandler(async (req, res) => {
       currentlyActiveToken.isActive = false;
       currentlyActiveToken.tokenActivationTime = null;
 
-      const diff = differenceInMinutes(
-        currentTime,
-        queue.activeTokenId.tokenActivationTime
-      );
+      const diff = DateTime.fromJSDate(currentTime).diff(
+        DateTime.fromJSDate(queue.activeTokenId.tokenActivationTime),
+        "minutes"
+      ).minutes;
       queue.waitTime = queue.waitTime + diff;
       currentlyActiveToken.save();
     } else if (!queue.activeTokenId && queue.lastTokenId) {
       console.log("queue.lastTokenId");
-      const diff = differenceInMinutes(
-        currentTime,
-        queue.lastTokenId.checkedOutTime
-      );
+      const diff = DateTime.fromJSDate(currentTime).diff(
+        DateTime.fromJSDate(queue.lastTokenId.checkedOutTime),
+        "minutes"
+      ).minutes;
       queue.waitTime = queue.waitTime + diff;
       userToken = new UserToken({
         userId,
         tokenNumber,
-        estimatedTurnTime: estimatedTurnTime,
-        date: addHours(requestedDate, 5),
+        estimatedTurnTime: estimatedTurnTime || nowUTC,
+        date: DateTime.fromJSDate(requestedDate).toUTC().toJSDate(),
         checkInOutStatus: "onsite",
         isActive: true,
-        tokenGenerationTime: addHours(requestedDate, 5),
-        estimatedEndTime: addMinutes(estimatedTurnTime, 10),
+        tokenGenerationTime: nowUTC,
+        estimatedEndTime: DateTime.fromJSDate(estimatedTurnTime || nowUTC)
+          .plus({ minutes: 10 })
+          .toUTC()
+          .toJSDate(),
         isEmergency: true,
-        tokenActivationTime: addHours(requestedDate, 5),
+        tokenActivationTime: nowUTC,
       });
       console.log("userToken : ", userToken);
     }

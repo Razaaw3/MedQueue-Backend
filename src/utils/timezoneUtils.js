@@ -1,8 +1,7 @@
-import {format, parseISO, addHours} from 'date-fns';
-import moment from 'moment-timezone';
+import { DateTime } from "luxon";
 
 // Set the timezone for the entire application
-const TIMEZONE = 'Asia/Karachi';
+const TIMEZONE = "Asia/Karachi";
 
 /**
  * Convert a date to the application's timezone
@@ -11,20 +10,42 @@ const TIMEZONE = 'Asia/Karachi';
  */
 export const toAppTimezone = (date) => {
   if (!date) return null;
-  const dateObj = date instanceof Date ? date : parseISO(date);
-  return moment.tz(dateObj, TIMEZONE).toDate();
+
+  let dateTime;
+  if (date instanceof Date) {
+    dateTime = DateTime.fromJSDate(date);
+  } else if (typeof date === "string") {
+    dateTime = DateTime.fromISO(date);
+  } else {
+    return null;
+  }
+
+  if (!dateTime.isValid) return null;
+
+  return dateTime.setZone(TIMEZONE).toJSDate();
 };
 
 /**
  * Format a date in the application's timezone
  * @param {Date|string} date - The date to format
- * @param {string} formatStr - The format string (using date-fns format)
+ * @param {string} formatStr - The format string (using Luxon format)
  * @returns {string} - The formatted date string
  */
-export const formatInAppTimezone = (date, formatStr = 'yyyy-MM-dd HH:mm') => {
+export const formatInAppTimezone = (date, formatStr = "yyyy-MM-dd HH:mm") => {
   if (!date) return null;
-  const dateObj = toAppTimezone(date);
-  return format(dateObj, formatStr);
+
+  let dateTime;
+  if (date instanceof Date) {
+    dateTime = DateTime.fromJSDate(date);
+  } else if (typeof date === "string") {
+    dateTime = DateTime.fromISO(date);
+  } else {
+    return null;
+  }
+
+  if (!dateTime.isValid) return null;
+
+  return dateTime.setZone(TIMEZONE).toFormat(formatStr);
 };
 
 /**
@@ -32,7 +53,7 @@ export const formatInAppTimezone = (date, formatStr = 'yyyy-MM-dd HH:mm') => {
  * @returns {Date} - The current date in the application's timezone
  */
 export const getCurrentAppTime = () => {
-  return moment.tz(TIMEZONE).toDate();
+  return DateTime.now().setZone(TIMEZONE).toJSDate();
 };
 
 /**
@@ -42,8 +63,19 @@ export const getCurrentAppTime = () => {
  */
 export const toUTC = (date) => {
   if (!date) return null;
-  const dateObj = date instanceof Date ? date : parseISO(date);
-  return moment.tz(dateObj, TIMEZONE).utc().toDate();
+
+  let dateTime;
+  if (date instanceof Date) {
+    dateTime = DateTime.fromJSDate(date);
+  } else if (typeof date === "string") {
+    dateTime = DateTime.fromISO(date);
+  } else {
+    return null;
+  }
+
+  if (!dateTime.isValid) return null;
+
+  return dateTime.setZone(TIMEZONE).toUTC().toJSDate();
 };
 
 /**
@@ -53,8 +85,19 @@ export const toUTC = (date) => {
  */
 export const fromUTC = (date) => {
   if (!date) return null;
-  const dateObj = date instanceof Date ? date : parseISO(date);
-  return moment.utc(dateObj).tz(TIMEZONE).toDate();
+
+  let dateTime;
+  if (date instanceof Date) {
+    dateTime = DateTime.fromJSDate(date);
+  } else if (typeof date === "string") {
+    dateTime = DateTime.fromISO(date);
+  } else {
+    return null;
+  }
+
+  if (!dateTime.isValid) return null;
+
+  return dateTime.setZone("UTC").setZone(TIMEZONE).toJSDate();
 };
 
 /**
@@ -64,8 +107,19 @@ export const fromUTC = (date) => {
  */
 export const getStartOfDay = (date) => {
   if (!date) return null;
-  const dateObj = toAppTimezone(date);
-  return moment.tz(dateObj, TIMEZONE).startOf('day').toDate();
+
+  let dateTime;
+  if (date instanceof Date) {
+    dateTime = DateTime.fromJSDate(date);
+  } else if (typeof date === "string") {
+    dateTime = DateTime.fromISO(date);
+  } else {
+    return null;
+  }
+
+  if (!dateTime.isValid) return null;
+
+  return dateTime.setZone(TIMEZONE).startOf("day").toJSDate();
 };
 
 /**
@@ -75,6 +129,17 @@ export const getStartOfDay = (date) => {
  */
 export const getEndOfDay = (date) => {
   if (!date) return null;
-  const dateObj = toAppTimezone(date);
-  return moment.tz(dateObj, TIMEZONE).endOf('day').toDate();
+
+  let dateTime;
+  if (date instanceof Date) {
+    dateTime = DateTime.fromJSDate(date);
+  } else if (typeof date === "string") {
+    dateTime = DateTime.fromISO(date);
+  } else {
+    return null;
+  }
+
+  if (!dateTime.isValid) return null;
+
+  return dateTime.setZone(TIMEZONE).endOf("day").toJSDate();
 };

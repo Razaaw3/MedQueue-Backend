@@ -1,6 +1,5 @@
-import moment from 'moment-timezone';
-import mongoose from 'mongoose';
-import {toUTC, fromUTC} from '../utils/timezoneUtils.js';
+import mongoose from "mongoose";
+import { toUTC, fromUTC } from "../utils/timezoneUtils.js";
 
 const userTokenSchema = new mongoose.Schema(
   {
@@ -10,7 +9,7 @@ const userTokenSchema = new mongoose.Schema(
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
     },
     tokenGenerationTime: {
@@ -19,8 +18,8 @@ const userTokenSchema = new mongoose.Schema(
     },
     checkInOutStatus: {
       type: String,
-      enum: ['pending', 'onsite', 'completed', 'cancelled'],
-      default: 'pending',
+      enum: ["pending", "onsite", "completed", "cancelled"],
+      default: "pending",
     },
     estimatedTurnTime: {
       type: Date,
@@ -53,11 +52,11 @@ const userTokenSchema = new mongoose.Schema(
     cancellationDetails: {
       cancelledBy: {
         type: String,
-        enum: ['user', 'admin'],
+        enum: ["user", "admin"],
       },
       cancelledById: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
+        ref: "User",
       },
       cancelledAt: {
         type: Date,
@@ -70,26 +69,26 @@ const userTokenSchema = new mongoose.Schema(
 );
 
 // Convert dates to UTC before saving
-userTokenSchema.pre('save', function (next) {
-  if (this.isModified('tokenGenerationTime')) {
+userTokenSchema.pre("save", function (next) {
+  if (this.isModified("tokenGenerationTime")) {
     this.tokenGenerationTime = toUTC(this.tokenGenerationTime);
   }
-  if (this.isModified('estimatedTurnTime')) {
+  if (this.isModified("estimatedTurnTime")) {
     this.estimatedTurnTime = toUTC(this.estimatedTurnTime);
   }
-  if (this.isModified('estimatedEndTime')) {
+  if (this.isModified("estimatedEndTime")) {
     this.estimatedEndTime = toUTC(this.estimatedEndTime);
   }
-  if (this.isModified('tokenActivationTime')) {
+  if (this.isModified("tokenActivationTime")) {
     this.tokenActivationTime = toUTC(this.tokenActivationTime);
   }
-  if (this.isModified('date')) {
+  if (this.isModified("date")) {
     this.date = toUTC(this.date);
   }
-  if (this.isModified('checkedOutTime')) {
+  if (this.isModified("checkedOutTime")) {
     this.checkedOutTime = toUTC(this.checkedOutTime);
   }
-  if (this.isModified('cancellationDetails.cancelledAt')) {
+  if (this.isModified("cancellationDetails.cancelledAt")) {
     this.cancellationDetails.cancelledAt = toUTC(
       this.cancellationDetails.cancelledAt
     );
@@ -98,7 +97,7 @@ userTokenSchema.pre('save', function (next) {
 });
 
 // Convert dates from UTC when retrieving
-userTokenSchema.post('find', function (docs) {
+userTokenSchema.post("find", function (docs) {
   docs.forEach((doc) => {
     if (doc.tokenGenerationTime)
       doc.tokenGenerationTime = fromUTC(doc.tokenGenerationTime);
@@ -118,7 +117,7 @@ userTokenSchema.post('find', function (docs) {
   });
 });
 
-userTokenSchema.post('findOne', function (doc) {
+userTokenSchema.post("findOne", function (doc) {
   if (!doc) return;
   if (doc.tokenGenerationTime)
     doc.tokenGenerationTime = fromUTC(doc.tokenGenerationTime);
@@ -137,5 +136,5 @@ userTokenSchema.post('findOne', function (doc) {
   }
 });
 
-const UserToken = mongoose.model('UserToken', userTokenSchema);
+const UserToken = mongoose.model("UserToken", userTokenSchema);
 export default UserToken;

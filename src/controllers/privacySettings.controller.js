@@ -1,10 +1,8 @@
 import PrivacySettings from "../models/PrivacySettings.model.js";
 import Clinic from "../models/clinic.model.js";
 import Queue from "../models/queue.model.js";
-import moment from "moment-timezone";
 import { asyncHandler } from "../utils/errors/asyncHandler.js";
 import ApiError from "../utils/errors/ApiError.js";
-import { addHours, differenceInMinutes } from "date-fns";
 import { ApiResponse } from "../utils/errors/ApiResponse.js";
 
 export const getSettings = asyncHandler(async (req, res) => {

@@ -1,25 +1,27 @@
 import UserToken from "../models/userToken.model.js";
-import moment from "moment-timezone";
+import { DateTime } from "luxon";
 import PDFDocument from "pdfkit";
 
 // Get dashboard statistics
 export const getDashboardStats = async (req, res) => {
   try {
-    const currentMonthStart = moment().startOf("month");
-    const previousMonthStart = moment().subtract(1, "month").startOf("month");
-    const previousMonthEnd = moment().subtract(1, "month").endOf("month");
-    const lastHour = moment().subtract(1, "hour");
+    const currentMonthStart = DateTime.now().startOf("month");
+    const previousMonthStart = DateTime.now()
+      .minus({ months: 1 })
+      .startOf("month");
+    const previousMonthEnd = DateTime.now().minus({ months: 1 }).endOf("month");
+    const lastHour = DateTime.now().minus({ hours: 1 });
 
     const currentMonthTokens = await UserToken.countDocuments({
       createdAt: {
-        $gte: currentMonthStart.toDate(),
+        $gte: currentMonthStart.toJSDate(),
       },
     });
 
     const lastMonthTokens = await UserToken.countDocuments({
       createdAt: {
-        $gte: previousMonthStart.toDate(),
-        $lte: previousMonthEnd.toDate(),
+        $gte: previousMonthStart.toJSDate(),
+        $lte: previousMonthEnd.toJSDate(),
       },
     });
 
@@ -34,15 +36,15 @@ export const getDashboardStats = async (req, res) => {
     const currentMonthVisited = await UserToken.countDocuments({
       checkInOutStatus: "completed",
       createdAt: {
-        $gte: currentMonthStart.toDate(),
+        $gte: currentMonthStart.toJSDate(),
       },
     });
 
     const lastMonthVisited = await UserToken.countDocuments({
       checkInOutStatus: "completed",
       createdAt: {
-        $gte: previousMonthStart.toDate(),
-        $lte: previousMonthEnd.toDate(),
+        $gte: previousMonthStart.toJSDate(),
+        $lte: previousMonthEnd.toJSDate(),
       },
     });
 
@@ -57,15 +59,15 @@ export const getDashboardStats = async (req, res) => {
     const currentMonthCancelled = await UserToken.countDocuments({
       checkInOutStatus: "cancelled",
       createdAt: {
-        $gte: currentMonthStart.toDate(),
+        $gte: currentMonthStart.toJSDate(),
       },
     });
 
     const lastMonthCancelled = await UserToken.countDocuments({
       checkInOutStatus: "cancelled",
       createdAt: {
-        $gte: previousMonthStart.toDate(),
-        $lte: previousMonthEnd.toDate(),
+        $gte: previousMonthStart.toJSDate(),
+        $lte: previousMonthEnd.toJSDate(),
       },
     });
 
@@ -85,7 +87,7 @@ export const getDashboardStats = async (req, res) => {
 
     const lastHourPending = await UserToken.countDocuments({
       checkInOutStatus: "pending",
-      createdAt: { $gte: lastHour.toDate() },
+      createdAt: { $gte: lastHour.toJSDate() },
     });
 
     res.status(200).json({
@@ -127,7 +129,7 @@ export const getDashboardStats = async (req, res) => {
 export const getTokenTracks = async (req, res) => {
   try {
     const { period = "month" } = req.query;
-    const now = moment();
+    const now = DateTime.now();
 
     let currentPeriodStart,
       currentPeriodEnd,
@@ -135,24 +137,24 @@ export const getTokenTracks = async (req, res) => {
       previousPeriodEnd;
 
     if (period === "month") {
-      currentPeriodStart = moment().startOf("year");
-      currentPeriodEnd = moment();
+      currentPeriodStart = DateTime.now().startOf("year");
+      currentPeriodEnd = DateTime.now();
 
-      previousPeriodStart = moment().subtract(1, "year").startOf("year");
-      previousPeriodEnd = moment().subtract(1, "year").endOf("year");
+      previousPeriodStart = DateTime.now().minus({ years: 1 }).startOf("year");
+      previousPeriodEnd = DateTime.now().minus({ years: 1 }).endOf("year");
     } else {
-      currentPeriodStart = moment().startOf("week");
-      currentPeriodEnd = moment().endOf("week");
-      previousPeriodStart = moment().subtract(1, "week").startOf("week");
-      previousPeriodEnd = moment().subtract(1, "week").endOf("week");
+      currentPeriodStart = DateTime.now().startOf("week");
+      currentPeriodEnd = DateTime.now().endOf("week");
+      previousPeriodStart = DateTime.now().minus({ weeks: 1 }).startOf("week");
+      previousPeriodEnd = DateTime.now().minus({ weeks: 1 }).endOf("week");
     }
 
     const currentPeriodData = await UserToken.aggregate([
       {
         $match: {
           createdAt: {
-            $gte: currentPeriodStart.toDate(),
-            $lte: currentPeriodEnd.toDate(),
+            $gte: currentPeriodStart.toJSDate(),
+            $lte: currentPeriodEnd.toJSDate(),
           },
         },
       },
@@ -175,8 +177,8 @@ export const getTokenTracks = async (req, res) => {
       {
         $match: {
           createdAt: {
-            $gte: previousPeriodStart.toDate(),
-            $lte: previousPeriodEnd.toDate(),
+            $gte: previousPeriodStart.toJSDate(),
+            $lte: previousPeriodEnd.toJSDate(),
           },
         },
       },
@@ -195,47 +197,49 @@ export const getTokenTracks = async (req, res) => {
       },
     ]);
 
-    const currentMonth = now.month();
+    const currentMonth = now.month;
     const currentMonthData = currentPeriodData.find(
-      (d) => d._id.month === currentMonth + 1
-    );
-    const previousMonthData = currentPeriodData.find(
       (d) => d._id.month === currentMonth
     );
 
-    const percentageChange = previousMonthData?.count
-      ? (((currentMonthData?.count || 0) - previousMonthData.count) /
-          previousMonthData.count) *
-        100
-      : 0;
-
     const formatPeriodData = (data, year) => {
-      return Array.from({ length: 12 }, (_, i) => {
+      const months = [];
+      for (let i = 0; i < 12; i++) {
         const monthData = data.find((d) => d._id.month === i + 1);
-        return {
-          day: moment().month(i).format("MMM"),
-          date: moment().year(year).month(i).format("YYYY-MM-DD"),
-          token: monthData?.count || 0,
-        };
-      });
+        months.push({
+          day: DateTime.now()
+            .set({ month: i + 1 })
+            .toFormat("MMM"),
+          date: DateTime.now()
+            .set({ year, month: i + 1 })
+            .toFormat("yyyy-MM-dd"),
+          token: monthData ? monthData.count : 0,
+        });
+      }
+      return months;
     };
 
-    const currentYear = now.year();
-    const previousYear = currentYear - 1;
+    const currentPeriodFormatted = formatPeriodData(
+      currentPeriodData,
+      currentPeriodStart.year
+    );
+    const previousPeriodFormatted = formatPeriodData(
+      previousPeriodData,
+      previousPeriodStart.year
+    );
 
     res.status(200).json({
       success: true,
       data: {
         currentPeriod: {
-          data: formatPeriodData(currentPeriodData, currentYear),
-          percentageChange: Number(percentageChange.toFixed(1)),
-          startDate: currentPeriodStart.format("YYYY-MM-DD"),
-          endDate: currentPeriodEnd.format("YYYY-MM-DD"),
+          data: currentPeriodFormatted,
+          startDate: currentPeriodStart.toFormat("yyyy-MM-dd"),
+          endDate: currentPeriodEnd.toFormat("yyyy-MM-dd"),
         },
         previousPeriod: {
-          data: formatPeriodData(previousPeriodData, previousYear),
-          startDate: previousPeriodStart.format("YYYY-MM-DD"),
-          endDate: previousPeriodEnd.format("YYYY-MM-DD"),
+          data: previousPeriodFormatted,
+          startDate: previousPeriodStart.toFormat("yyyy-MM-dd"),
+          endDate: previousPeriodEnd.toFormat("yyyy-MM-dd"),
         },
       },
     });
@@ -252,48 +256,50 @@ export const getTokenTracks = async (req, res) => {
 // Get appointments data
 export const getAppointments = async (req, res) => {
   try {
-    const currentMonthStart = moment().startOf("month");
-    const currentMonthEnd = moment().endOf("month");
-    const previousMonthStart = moment().subtract(1, "month").startOf("month");
-    const previousMonthEnd = moment().subtract(1, "month").endOf("month");
+    const currentMonthStart = DateTime.now().startOf("month");
+    const currentMonthEnd = DateTime.now().endOf("month");
+    const previousMonthStart = DateTime.now()
+      .minus({ months: 1 })
+      .startOf("month");
+    const previousMonthEnd = DateTime.now().minus({ months: 1 }).endOf("month");
 
     const currentMonthUpcoming = await UserToken.countDocuments({
       checkInOutStatus: "pending",
       isExpired: false,
       createdAt: {
-        $gte: currentMonthStart.toDate(),
-        $lte: currentMonthEnd.toDate(),
+        $gte: currentMonthStart.toJSDate(),
+        $lte: currentMonthEnd.toJSDate(),
       },
     });
 
     const currentMonthOnsite = await UserToken.countDocuments({
       checkInOutStatus: "onsite",
       createdAt: {
-        $gte: currentMonthStart.toDate(),
-        $lte: currentMonthEnd.toDate(),
+        $gte: currentMonthStart.toJSDate(),
+        $lte: currentMonthEnd.toJSDate(),
       },
     });
 
     const currentMonthVisited = await UserToken.countDocuments({
       checkInOutStatus: "completed",
       createdAt: {
-        $gte: currentMonthStart.toDate(),
-        $lte: currentMonthEnd.toDate(),
+        $gte: currentMonthStart.toJSDate(),
+        $lte: currentMonthEnd.toJSDate(),
       },
     });
 
     const currentMonthCancelled = await UserToken.countDocuments({
       checkInOutStatus: "cancelled",
       createdAt: {
-        $gte: currentMonthStart.toDate(),
-        $lte: currentMonthEnd.toDate(),
+        $gte: currentMonthStart.toJSDate(),
+        $lte: currentMonthEnd.toJSDate(),
       },
     });
 
     const previousMonthTotal = await UserToken.countDocuments({
       createdAt: {
-        $gte: previousMonthStart.toDate(),
-        $lte: previousMonthEnd.toDate(),
+        $gte: previousMonthStart.toJSDate(),
+        $lte: previousMonthEnd.toJSDate(),
       },
     });
 
@@ -342,7 +348,7 @@ export const downloadReport = async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=dashboard-report-${moment().format(
+      `attachment; filename=dashboard-report-${DateTime.now().toFormat(
         "YYYY-MM-DD"
       )}.pdf`
     );
@@ -359,9 +365,9 @@ export const downloadReport = async (req, res) => {
       doc
         .fontSize(12)
         .text(
-          `Period: ${moment(startDate).format("MMMM D, YYYY")} - ${moment(
-            endDate
-          ).format("MMMM D, YYYY")}`,
+          `Period: ${DateTime.fromISO(startDate).toFormat(
+            "MMMM D, YYYY"
+          )} - ${DateTime.fromISO(endDate).toFormat("MMMM D, YYYY")}`,
           { align: "center" }
         )
         .moveDown();
@@ -370,8 +376,8 @@ export const downloadReport = async (req, res) => {
     const dateFilter = {};
     if (startDate && endDate) {
       dateFilter.createdAt = {
-        $gte: moment(startDate).startOf("day").toDate(),
-        $lte: moment(endDate).endOf("day").toDate(),
+        $gte: DateTime.fromISO(startDate).startOf("day").toJSDate(),
+        $lte: DateTime.fromISO(endDate).endOf("day").toJSDate(),
       };
     }
 
@@ -420,7 +426,9 @@ export const downloadReport = async (req, res) => {
     doc
       .fontSize(10)
       .text(
-        `Report generated on ${moment().format("MMMM D, YYYY [at] HH:mm:ss")}`,
+        `Report generated on ${DateTime.now().toFormat(
+          "MMMM D, YYYY [at] HH:mm:ss"
+        )}`,
         { align: "right" }
       );
 

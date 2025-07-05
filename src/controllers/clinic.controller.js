@@ -2,7 +2,7 @@ import Clinic from "../models/clinic.model.js";
 import ApiError from "../utils/errors/ApiError.js";
 import { ApiResponse } from "../utils/errors/ApiResponse.js";
 import { asyncHandler } from "../utils/errors/asyncHandler.js";
-import { format, parse } from "date-fns";
+import { DateTime } from "luxon";
 
 // @desc    Create a new clinic (only if one does not exist)
 // @route   POST /api/clinic
@@ -116,10 +116,10 @@ export const updateClinicSettings = asyncHandler(async (req, res) => {
 
   // Convert times to AM/PM format if they're in 24-hour format
   const formattedOpeningTime = isValid24HourFormat
-    ? format(parse(clinicOpeningTime, "HH:mm", new Date()), "hh:mm a")
+    ? DateTime.fromFormat(clinicOpeningTime, "HH:mm").toFormat("hh:mm a")
     : clinicOpeningTime.toUpperCase();
   const formattedClosingTime = isValid24HourFormat
-    ? format(parse(clinicClosingTime, "HH:mm", new Date()), "hh:mm a")
+    ? DateTime.fromFormat(clinicClosingTime, "HH:mm").toFormat("hh:mm a")
     : clinicClosingTime.toUpperCase();
 
   let clinic = await Clinic.findOne();
