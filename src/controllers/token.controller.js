@@ -1100,6 +1100,7 @@ export const getUserToken = asyncHandler(async (req, res) => {
     date,
   }).lean();
   const queue = await Queue.findOne({}).lean();
+  const clinic = await Clinic.findOne({}).lean();
 
   const token = await UserToken.findOne({
     date: date,
@@ -1113,7 +1114,11 @@ export const getUserToken = asyncHandler(async (req, res) => {
       exceptional: queue?.exceptional || [],
       active: token || null,
       isEmergency: token?.isEmergency || false,
-      doctorAvailability: settings.doctorAvailability,
+      doctorAvailability:
+        settings.doctorAvailability === 'Available' &&
+        clinic.tokenGenerationStatus
+          ? 'Available'
+          : 'Not Available',
     },
     message: 'Est. turn time updated successfully',
     success: true,
