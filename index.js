@@ -19,12 +19,12 @@ const app = express();
 const server = http.createServer(app);
 
 export const io = new Server(server, {
-  // cors: {
-  //   origin: "*",
-  //   credentials: true,
-  //   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  //   allowedHeaders: ["*"],
-  // },
+  cors: {
+    origin: '*',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['*'],
+  },
   transports: ['websocket', 'polling'],
   path: '/socket.io/',
   pingTimeout: 60000,
@@ -36,19 +36,19 @@ connectDB(io);
 app.use(express.json());
 app.use(cookieParser());
 
-// app.use(
-//   cors({
-//     origin: [
-//       "http://localhost:3001",
-//       "http://localhost:3000",
-//       "https://www.dashboard.medqueue.live",
-//       "https://dashboard.medqueue.live",
-//     ],
-//     credentials: true,
-//     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-//     allowedHeaders: ["Authorization", "Content-Type"],
-//   })
-// );
+app.use(
+  cors({
+    origin: [
+      'http://localhost:3001',
+      'http://localhost:3000',
+      'https://www.dashboard.medqueue.live',
+      'https://dashboard.medqueue.live',
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
+  })
+);
 
 app.use((req, res, next) => {
   req.io = io;
