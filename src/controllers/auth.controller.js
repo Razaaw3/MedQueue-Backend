@@ -269,7 +269,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Email is required');
   }
 
-  if (email || !validateEmail(email)) {
+  if (!email || !validateEmail(email)) {
     throw new ApiError(400, 'Invalid email format');
   }
 
