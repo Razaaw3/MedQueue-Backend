@@ -148,9 +148,7 @@ export const generateToken = asyncHandler(async (req, res) => {
       } else {
         estimatedTurnTime = openingTime;
         console.log('estimatedTurnTime (from openingTime):', estimatedTurnTime);
-        const now = DateTime.fromJSDate(getCurrentAppTime())
-          .plus({hours: 5})
-          .toJSDate();
+        const now = DateTime.fromJSDate(getCurrentAppTime()).toJSDate();
         console.log('now:', now);
         if (DateTime.fromJSDate(now) > DateTime.fromJSDate(openingTime)) {
           queue.waitTime = DateTime.fromJSDate(now).diff(
@@ -166,7 +164,11 @@ export const generateToken = asyncHandler(async (req, res) => {
     const now = DateTime.fromJSDate(getCurrentAppTime())
       .plus({hours: 5})
       .toJSDate();
-    console.log('now:', now);
+    console.log(
+      'now:',
+      DateTime.fromJSDate(now),
+      DateTime.fromJSDate(openingTime)
+    );
     if (DateTime.fromJSDate(now) > DateTime.fromJSDate(openingTime)) {
       if (!queue || queue.upcomingTokenIds.length === 0) {
         queue.waitTime = DateTime.fromJSDate(now).diff(
