@@ -77,9 +77,7 @@ export const generateToken = asyncHandler(async (req, res) => {
   }
 
   // Convert clinic opening time to application timezone
-  const openingTime = DateTime.fromFormat(clinic.clinicOpeningTime, 'hh:mm a', {
-    zone: 'Asia/Karachi',
-  })
+  const openingTime = DateTime.fromFormat(clinic.clinicOpeningTime, 'hh:mm a')
     .set({
       year: DateTime.fromJSDate(today).setZone('Asia/Karachi').year,
       month: DateTime.fromJSDate(today).setZone('Asia/Karachi').month,
@@ -91,9 +89,7 @@ export const generateToken = asyncHandler(async (req, res) => {
 
   console.log('openingTime:', openingTime);
 
-  const closingTime = DateTime.fromFormat(clinic.clinicClosingTime, 'hh:mm a', {
-    zone: 'Asia/Karachi',
-  })
+  const closingTime = DateTime.fromFormat(clinic.clinicClosingTime, 'hh:mm a')
     .set({
       year: DateTime.fromJSDate(today).setZone('Asia/Karachi').year,
       month: DateTime.fromJSDate(today).setZone('Asia/Karachi').month,
@@ -148,7 +144,9 @@ export const generateToken = asyncHandler(async (req, res) => {
       } else {
         estimatedTurnTime = openingTime;
         console.log('estimatedTurnTime (from openingTime):', estimatedTurnTime);
-        const now = DateTime.fromJSDate(getCurrentAppTime()).toJSDate();
+        const now = DateTime.fromJSDate(getCurrentAppTime())
+          .plus({hours: 5})
+          .toJSDate();
         console.log('now:', now);
         if (DateTime.fromJSDate(now) > DateTime.fromJSDate(openingTime)) {
           queue.waitTime = DateTime.fromJSDate(now).diff(
@@ -164,8 +162,10 @@ export const generateToken = asyncHandler(async (req, res) => {
     const now = DateTime.fromJSDate(getCurrentAppTime())
       .plus({hours: 5})
       .toJSDate();
+    console.log('now:', now);
+
     console.log(
-      'now:',
+      'DateTime.fromJSDate(now)',
       DateTime.fromJSDate(now),
       DateTime.fromJSDate(openingTime)
     );
@@ -175,7 +175,8 @@ export const generateToken = asyncHandler(async (req, res) => {
           DateTime.fromJSDate(openingTime),
           'minutes'
         ).minutes;
-        queue.waitTime = queue.waitTime - 300;
+
+        console.log('QUEUE.WAIT TIME  ', queue.waitTime);
       }
     }
   }
@@ -224,11 +225,10 @@ export const generateToken = asyncHandler(async (req, res) => {
     },
   });
 
-  await userToken.save();
+  // await userToken.save();
 
-  queue.upcomingTokenIds.push(userToken._id);
-
-  await queue.save();
+  // queue.upcomingTokenIds.push(userToken._id);
+  // await queue.save();
 
   const fullQueue = await Queue.findOne().populate('upcomingTokenIds');
 
