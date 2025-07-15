@@ -173,8 +173,7 @@ export const generateToken = asyncHandler(async (req, res) => {
           DateTime.fromJSDate(openingTime),
           'minutes'
         ).minutes;
-
-        console.log('QUEUE.WAIT TIME  ', queue.waitTime);
+        queue.waitTime = queue.waitTime - 300;
       }
     }
   }
