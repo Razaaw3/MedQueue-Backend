@@ -77,26 +77,32 @@ export const generateToken = asyncHandler(async (req, res) => {
   }
 
   // Convert clinic opening time to application timezone
-  const openingTime = DateTime.fromFormat(clinic.clinicOpeningTime, 'hh:mm a')
+  const openingTime = DateTime.fromFormat(clinic.clinicOpeningTime, 'hh:mm a', {
+    zone: 'Asia/Karachi',
+  })
     .set({
-      year: DateTime.fromJSDate(today).year,
-      month: DateTime.fromJSDate(today).month,
-      day: DateTime.fromJSDate(today).day,
+      year: DateTime.fromJSDate(today).setZone('Asia/Karachi').year,
+      month: DateTime.fromJSDate(today).setZone('Asia/Karachi').month,
+      day: DateTime.fromJSDate(today).setZone('Asia/Karachi').day,
       second: 0,
       millisecond: 0,
     })
     .toJSDate();
+
   console.log('openingTime:', openingTime);
 
-  const closingTime = DateTime.fromFormat(clinic.clinicClosingTime, 'hh:mm a')
+  const closingTime = DateTime.fromFormat(clinic.clinicClosingTime, 'hh:mm a', {
+    zone: 'Asia/Karachi',
+  })
     .set({
-      year: DateTime.fromJSDate(today).year,
-      month: DateTime.fromJSDate(today).month,
-      day: DateTime.fromJSDate(today).day,
+      year: DateTime.fromJSDate(today).setZone('Asia/Karachi').year,
+      month: DateTime.fromJSDate(today).setZone('Asia/Karachi').month,
+      day: DateTime.fromJSDate(today).setZone('Asia/Karachi').day,
       second: 0,
       millisecond: 0,
     })
     .toJSDate();
+
   console.log('closingTime:', closingTime);
 
   const tokenStartTime = DateTime.fromJSDate(openingTime)
@@ -192,7 +198,7 @@ export const generateToken = asyncHandler(async (req, res) => {
       .toUTC()
       .toJSDate(),
     estimatedEndTime: DateTime.fromJSDate(estimatedTurnTime)
-      .minus(290)
+      .plus({minutes: 10})
       .toUTC()
       .toJSDate(),
   });
