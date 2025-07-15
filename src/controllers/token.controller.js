@@ -225,10 +225,10 @@ export const generateToken = asyncHandler(async (req, res) => {
     },
   });
 
-  // await userToken.save();
+  await userToken.save();
 
-  // queue.upcomingTokenIds.push(userToken._id);
-  // await queue.save();
+  queue.upcomingTokenIds.push(userToken._id);
+  await queue.save();
 
   const fullQueue = await Queue.findOne().populate('upcomingTokenIds');
 
