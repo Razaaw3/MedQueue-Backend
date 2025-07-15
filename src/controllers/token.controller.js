@@ -158,10 +158,9 @@ export const generateToken = asyncHandler(async (req, res) => {
     estimatedTurnTime = openingTime;
     console.log('estimatedTurnTime (no upcomingTokenIds):', estimatedTurnTime);
     const now = DateTime.fromJSDate(getCurrentAppTime())
-      // .plus({hours: 5})
+      .plus({hours: 5})
       .toJSDate();
     console.log('now:', now);
-    queue.waitTime = -300;
     if (DateTime.fromJSDate(now) > DateTime.fromJSDate(openingTime)) {
       if (!queue || queue.upcomingTokenIds.length === 0) {
         queue.waitTime = DateTime.fromJSDate(now).diff(
