@@ -192,7 +192,7 @@ export const generateToken = asyncHandler(async (req, res) => {
       .toUTC()
       .toJSDate(),
     estimatedEndTime: DateTime.fromJSDate(estimatedTurnTime)
-      .plus({minutes: 10})
+      .minus(290)
       .toUTC()
       .toJSDate(),
   });
