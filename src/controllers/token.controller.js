@@ -146,12 +146,12 @@ export const generateToken = asyncHandler(async (req, res) => {
           .plus({hours: 5})
           .toJSDate();
         console.log('now:', now);
+        queue.waitTime = queue.waitTime - 300;
         if (DateTime.fromJSDate(now) > DateTime.fromJSDate(openingTime)) {
           queue.waitTime = DateTime.fromJSDate(now).diff(
             DateTime.fromJSDate(openingTime),
             'minutes'
           ).minutes;
-          queue.waitTime = queue.waitTime - 300;
         }
       }
     }
